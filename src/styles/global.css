@@ -312,6 +312,22 @@ button:disabled {
   font-size: 13px;
 }
 
+.hint {
+  margin: 6px 0;
+  font-size: 13px;
+  color: #475467;
+}
+
+details {
+  margin: 10px 0;
+}
+
+summary {
+  cursor: pointer;
+  color: #155e75;
+  font-size: 13px;
+}
+
 @media (max-width: 780px) {
   .app {
     grid-template-columns: 1fr;

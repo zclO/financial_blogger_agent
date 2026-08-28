@@ -22,6 +22,38 @@ const defaultTopics: Topic[] = [
   { id: 2, title: "BTC ETF 日度资金数据待核验", source: "授权行情源（示例）", verified: false },
 ];
 
+const COIN_DICTIONARY: Array<{ symbol: string; keywords: string[] }> = [
+  { symbol: "BTC", keywords: ["btc", "bitcoin", "比特币"] },
+  { symbol: "ETH", keywords: ["eth", "ethereum", "以太坊"] },
+  { symbol: "BNB", keywords: ["bnb", "币安币"] },
+  { symbol: "SOL", keywords: ["sol", "solana"] },
+  { symbol: "XRP", keywords: ["xrp", "瑞波"] },
+  { symbol: "DOGE", keywords: ["doge", "dogecoin", "狗狗币"] },
+  { symbol: "ADA", keywords: ["ada", "cardano"] },
+  { symbol: "TRX", keywords: ["trx", "tron", "波场"] },
+  { symbol: "LTC", keywords: ["ltc", "litecoin", "莱特币"] },
+];
+
+function normalizeSymbols(input: string): string[] {
+  const raw = input
+    .split(/[,\s，、]+/)
+    .map((x) => x.trim().toUpperCase())
+    .filter((x) => /^[A-Z][A-Z0-9]{1,9}$/.test(x));
+  return Array.from(new Set(raw));
+}
+
+function extractSymbolsFromContent(title: string, body: string): string[] {
+  const source = `${title}\n${body}`.toLowerCase();
+  const detected = COIN_DICTIONARY.filter((item) => item.keywords.some((k) => source.includes(k))).map((x) => x.symbol);
+  return Array.from(new Set(detected));
+}
+
+function buildFinalBody(body: string, symbols: string[]): string {
+  if (symbols.length === 0) return body;
+  const tags = symbols.flatMap((s) => [`#${s}`, `$${s}`]).join(" ");
+  return `${body.trim()}\n\n${tags}`;
+}
+
 export function App() {
   const [tab, setTab] = useState<Tab>("仪表盘");
   const [topics, setTopics] = useState<Topic[]>(defaultTopics);
@@ -41,14 +73,12 @@ export function App() {
   const [openingSquare, setOpeningSquare] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState("");
 
-  const [proxyConfig, setProxyConfig] = useState<BinanceSquareProxyConfig>({
-    enabled: false,
-    proxyUrl: null,
-  });
+  const [proxyConfig, setProxyConfig] = useState<BinanceSquareProxyConfig>({ enabled: false, proxyUrl: null });
   const [proxyUrlInput, setProxyUrlInput] = useState("");
   const [proxySaving, setProxySaving] = useState(false);
   const [proxyNotice, setProxyNotice] = useState("");
 
+  const [manualSymbolsInput, setManualSymbolsInput] = useState("");
   const [allowScheduledPublish, setAllowScheduledPublish] = useState(false);
   const [scheduleAtInput, setScheduleAtInput] = useState("");
   const [publishState, setPublishState] = useState<PublishState>("idle");
@@ -56,6 +86,10 @@ export function App() {
   const [queueLogs, setQueueLogs] = useState<string[]>([]);
 
   const verifiedCount = useMemo(() => topics.filter((x) => x.verified).length, [topics]);
+  const autoSymbols = useMemo(() => extractSymbolsFromContent(draft.title, draft.body), [draft.body, draft.title]);
+  const manualSymbols = useMemo(() => normalizeSymbols(manualSymbolsInput), [manualSymbolsInput]);
+  const allSymbols = useMemo(() => Array.from(new Set([...autoSymbols, ...manualSymbols])), [autoSymbols, manualSymbols]);
+  const finalPublishBody = useMemo(() => buildFinalBody(draft.body, allSymbols), [allSymbols, draft.body]);
 
   const nowText = () =>
     new Date().toLocaleString("zh-CN", {
@@ -103,11 +137,15 @@ export function App() {
       setNotice("草稿必须保留“信息整理，不构成投资建议”。");
       return;
     }
+    if (allSymbols.length === 0) {
+      setNotice("请至少添加一个相关币种，系统会自动附加 #币种 与 $币种 标签。");
+      return;
+    }
     setDraft((prev) => ({ ...prev, queued: true }));
     setPublishState("idle");
     setPublishOutput("");
-    appendQueueLog("草稿进入发布队列（待人工/定时执行）。");
-    setNotice("已进入发布队列。默认不会自动发送，需手动开启定时执行。");
+    appendQueueLog(`草稿进入发布队列；标签：${allSymbols.join(", ")}`);
+    setNotice("已进入发布队列。");
     setTab("发布队列");
   };
 
@@ -181,12 +219,16 @@ export function App() {
       setNotice("Square OpenAPI Key 未配置，无法发送。");
       return;
     }
+    if (allSymbols.length === 0) {
+      setNotice("缺少币种标签，无法发送。");
+      return;
+    }
 
     setPublishState("sending");
     try {
       const result = await publishBinanceSquareText({
         title: draft.title,
-        text: draft.body,
+        text: finalPublishBody,
       });
       setPublishOutput(result.trim());
       setPublishState("sent");
@@ -247,7 +289,7 @@ export function App() {
       }
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [allowScheduledPublish, draft.queued, publishState, scheduleAtInput]);
+  }, [allowScheduledPublish, draft.queued, publishState, scheduleAtInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="app">
@@ -311,6 +353,16 @@ export function App() {
               正文
               <textarea rows={12} value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
             </label>
+            <label>
+              手动补充币种（逗号分隔）
+              <input
+                value={manualSymbolsInput}
+                onChange={(e) => setManualSymbolsInput(e.target.value)}
+                placeholder="例如 BTC,ETH,SOL"
+              />
+            </label>
+            <p className="hint">自动识别：{autoSymbols.length ? autoSymbols.join(", ") : "未识别到币种"}。</p>
+            <p className="hint">最终标签：{allSymbols.length ? allSymbols.map((s) => `#${s} $${s}`).join(" ") : "未设置"}。</p>
             <label className="inline">
               <input
                 type="checkbox"
@@ -345,6 +397,11 @@ export function App() {
                     {publishState === "failed" && "发送失败"}
                   </span>
                 </div>
+                <p className="hint">本次发送标签：{allSymbols.map((s) => `#${s} $${s}`).join(" ")}</p>
+                <details>
+                  <summary>查看最终发送文本</summary>
+                  <pre className="output">{finalPublishBody}</pre>
+                </details>
 
                 <label className="inline">
                   <input

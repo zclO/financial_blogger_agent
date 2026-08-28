@@ -191,6 +191,10 @@ fn square(app: &AppHandle, script: &str, args: &[&str], key: Option<&str>) -> Re
             cmd.env("HTTP_PROXY", proxy_url);
             cmd.env("HTTPS_PROXY", proxy_url);
             cmd.env("ALL_PROXY", proxy_url);
+            cmd.env("http_proxy", proxy_url);
+            cmd.env("https_proxy", proxy_url);
+            cmd.env("all_proxy", proxy_url);
+            cmd.env("NODE_USE_ENV_PROXY", "1");
         }
     }
 
