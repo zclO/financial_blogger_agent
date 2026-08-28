@@ -20,6 +20,12 @@ export interface BinanceSquareProxyConfig {
   proxyUrl: string | null;
 }
 
+export interface BinanceSymbolSearchItem {
+  symbol: string;
+  baseAsset: string;
+  quoteAsset: string;
+}
+
 export function getBinanceSquareConfig(): Promise<BinanceSquareConfig> {
   return invoke<BinanceSquareConfig>("get_binance_square_config");
 }
@@ -44,4 +50,11 @@ export function setBinanceSquareProxyConfig(payload: {
   proxyUrl?: string | null;
 }): Promise<string> {
   return invoke<string>("set_binance_square_proxy_config", payload);
+}
+
+export function searchBinanceSymbols(payload: {
+  query: string;
+  limit?: number;
+}): Promise<BinanceSymbolSearchItem[]> {
+  return invoke<BinanceSymbolSearchItem[]>("search_binance_symbols", payload);
 }

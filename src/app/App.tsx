@@ -6,9 +6,11 @@ import {
   getBinanceSquareConfig,
   getBinanceSquareProxyConfig,
   publishBinanceSquareText,
+  searchBinanceSymbols,
   setBinanceSquareProxyConfig,
   type BinanceSquareConfig,
   type BinanceSquareProxyConfig,
+  type BinanceSymbolSearchItem,
 } from "../lib/tauri";
 
 type Tab = "仪表盘" | "选题池" | "内容工坊" | "发布队列" | "设置";
@@ -22,35 +24,29 @@ const defaultTopics: Topic[] = [
   { id: 2, title: "BTC ETF 日度资金数据待核验", source: "授权行情源（示例）", verified: false },
 ];
 
-const COIN_DICTIONARY: Array<{ symbol: string; keywords: string[] }> = [
-  { symbol: "BTC", keywords: ["btc", "bitcoin", "比特币"] },
-  { symbol: "ETH", keywords: ["eth", "ethereum", "以太坊"] },
-  { symbol: "BNB", keywords: ["bnb", "币安币"] },
-  { symbol: "SOL", keywords: ["sol", "solana"] },
-  { symbol: "XRP", keywords: ["xrp", "瑞波"] },
-  { symbol: "DOGE", keywords: ["doge", "dogecoin", "狗狗币"] },
-  { symbol: "ADA", keywords: ["ada", "cardano"] },
-  { symbol: "TRX", keywords: ["trx", "tron", "波场"] },
-  { symbol: "LTC", keywords: ["ltc", "litecoin", "莱特币"] },
-];
-
 function normalizeSymbols(input: string): string[] {
-  const raw = input
-    .split(/[,\s，、]+/)
-    .map((x) => x.trim().toUpperCase())
-    .filter((x) => /^[A-Z][A-Z0-9]{1,9}$/.test(x));
-  return Array.from(new Set(raw));
+  return Array.from(
+    new Set(
+      input
+        .split(/[,\s，、]+/)
+        .map((x) => x.trim().toUpperCase())
+        .filter((x) => /^[A-Z][A-Z0-9]{1,9}$/.test(x)),
+    ),
+  );
 }
 
-function extractSymbolsFromContent(title: string, body: string): string[] {
-  const source = `${title}\n${body}`.toLowerCase();
-  const detected = COIN_DICTIONARY.filter((item) => item.keywords.some((k) => source.includes(k))).map((x) => x.symbol);
-  return Array.from(new Set(detected));
+function extractTaggedSymbols(body: string): string[] {
+  const matched = body.match(/[#$]([A-Za-z][A-Za-z0-9]{1,9})/g) ?? [];
+  return Array.from(new Set(matched.map((x) => x.slice(1).toUpperCase())));
 }
 
 function buildFinalBody(body: string, symbols: string[]): string {
   if (symbols.length === 0) return body;
-  const tags = symbols.flatMap((s) => [`#${s}`, `$${s}`]).join(" ");
+  const existing = new Set<string>();
+  for (const item of extractTaggedSymbols(body)) existing.add(item);
+  const missing = symbols.filter((s) => !existing.has(s));
+  if (missing.length === 0) return body;
+  const tags = missing.flatMap((s) => [`#${s}`, `$${s}`]).join(" ");
   return `${body.trim()}\n\n${tags}`;
 }
 
@@ -79,6 +75,11 @@ export function App() {
   const [proxyNotice, setProxyNotice] = useState("");
 
   const [manualSymbolsInput, setManualSymbolsInput] = useState("");
+  const [symbolQuery, setSymbolQuery] = useState("");
+  const [symbolSearching, setSymbolSearching] = useState(false);
+  const [symbolSearchNotice, setSymbolSearchNotice] = useState("");
+  const [symbolSearchResults, setSymbolSearchResults] = useState<BinanceSymbolSearchItem[]>([]);
+
   const [allowScheduledPublish, setAllowScheduledPublish] = useState(false);
   const [scheduleAtInput, setScheduleAtInput] = useState("");
   const [publishState, setPublishState] = useState<PublishState>("idle");
@@ -86,10 +87,10 @@ export function App() {
   const [queueLogs, setQueueLogs] = useState<string[]>([]);
 
   const verifiedCount = useMemo(() => topics.filter((x) => x.verified).length, [topics]);
-  const autoSymbols = useMemo(() => extractSymbolsFromContent(draft.title, draft.body), [draft.body, draft.title]);
   const manualSymbols = useMemo(() => normalizeSymbols(manualSymbolsInput), [manualSymbolsInput]);
-  const allSymbols = useMemo(() => Array.from(new Set([...autoSymbols, ...manualSymbols])), [autoSymbols, manualSymbols]);
-  const finalPublishBody = useMemo(() => buildFinalBody(draft.body, allSymbols), [allSymbols, draft.body]);
+  const bodyTaggedSymbols = useMemo(() => extractTaggedSymbols(draft.body), [draft.body]);
+  const allSymbols = useMemo(() => Array.from(new Set([...bodyTaggedSymbols, ...manualSymbols])), [bodyTaggedSymbols, manualSymbols]);
+  const finalPublishBody = useMemo(() => buildFinalBody(draft.body, allSymbols), [draft.body, allSymbols]);
 
   const nowText = () =>
     new Date().toLocaleString("zh-CN", {
@@ -132,6 +133,35 @@ export function App() {
     void loadProxyConfig();
   }, []);
 
+  useEffect(() => {
+    const query = symbolQuery.trim();
+    if (query.length < 2) {
+      setSymbolSearchResults([]);
+      setSymbolSearchNotice(query.length === 0 ? "" : "至少输入 2 个字符再搜索。");
+      return;
+    }
+    const timer = window.setTimeout(async () => {
+      setSymbolSearching(true);
+      setSymbolSearchNotice("");
+      try {
+        const items = await searchBinanceSymbols({ query, limit: 20 });
+        setSymbolSearchResults(items);
+        if (items.length === 0) setSymbolSearchNotice("没有匹配到币种。");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setSymbolSearchNotice(`币种搜索失败：${message}`);
+      } finally {
+        setSymbolSearching(false);
+      }
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [symbolQuery]);
+
+  const addSymbolFromSearch = (symbol: string) => {
+    const merged = Array.from(new Set([...manualSymbols, symbol.toUpperCase()]));
+    setManualSymbolsInput(merged.join(","));
+  };
+
   const queueDraft = () => {
     if (!draft.body.includes("不构成投资建议")) {
       setNotice("草稿必须保留“信息整理，不构成投资建议”。");
@@ -160,8 +190,7 @@ export function App() {
     try {
       await configureBinanceSquare(apiKey);
       setSquareKeyInput("");
-      const time = nowText();
-      setSquareNotice(`Key 已保存（${time}）`);
+      setSquareNotice(`Key 已保存（${nowText()}）`);
       await loadSquareConfig(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -289,7 +318,7 @@ export function App() {
       }
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [allowScheduledPublish, draft.queued, publishState, scheduleAtInput]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [allowScheduledPublish, draft.queued, publishState, scheduleAtInput]); 
 
   return (
     <div className="app">
@@ -354,21 +383,32 @@ export function App() {
               <textarea rows={12} value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
             </label>
             <label>
-              手动补充币种（逗号分隔）
+              搜索币种（官方接口）
               <input
-                value={manualSymbolsInput}
-                onChange={(e) => setManualSymbolsInput(e.target.value)}
-                placeholder="例如 BTC,ETH,SOL"
+                value={symbolQuery}
+                onChange={(e) => setSymbolQuery(e.target.value)}
+                placeholder="输入 BTC / ETH / SOL / 比特币 对应英文缩写"
               />
             </label>
-            <p className="hint">自动识别：{autoSymbols.length ? autoSymbols.join(", ") : "未识别到币种"}。</p>
+            <div className="symbol-search-box">
+              {symbolSearching && <p className="hint">搜索中...</p>}
+              {!symbolSearching && symbolSearchNotice && <p className="hint">{symbolSearchNotice}</p>}
+              <div className="actions">
+                {symbolSearchResults.map((item) => (
+                  <button key={`${item.symbol}-${item.quoteAsset}`} type="button" onClick={() => addSymbolFromSearch(item.symbol)}>
+                    {item.symbol}/{item.quoteAsset}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label>
+              手动补充币种（逗号分隔）
+              <input value={manualSymbolsInput} onChange={(e) => setManualSymbolsInput(e.target.value)} placeholder="例如 BTC,ETH,SOL" />
+            </label>
+            <p className="hint">正文已含标签：{bodyTaggedSymbols.length ? bodyTaggedSymbols.join(", ") : "无"}。</p>
             <p className="hint">最终标签：{allSymbols.length ? allSymbols.map((s) => `#${s} $${s}`).join(" ") : "未设置"}。</p>
             <label className="inline">
-              <input
-                type="checkbox"
-                checked={draft.reviewed}
-                onChange={(e) => setDraft({ ...draft, reviewed: e.target.checked })}
-              />
+              <input type="checkbox" checked={draft.reviewed} onChange={(e) => setDraft({ ...draft, reviewed: e.target.checked })} />
               已完成人工来源与风险复核
             </label>
             <button disabled={!draft.reviewed} onClick={queueDraft}>
@@ -402,7 +442,6 @@ export function App() {
                   <summary>查看最终发送文本</summary>
                   <pre className="output">{finalPublishBody}</pre>
                 </details>
-
                 <label className="inline">
                   <input
                     type="checkbox"
@@ -414,12 +453,10 @@ export function App() {
                   />
                   允许执行定时发送（人工暂停开关）
                 </label>
-
                 <label>
                   发送时间
                   <input type="datetime-local" value={scheduleAtInput} onChange={(e) => setScheduleAtInput(e.target.value)} />
                 </label>
-
                 <div className="actions">
                   <button disabled={publishState === "sending"} onClick={schedulePublish}>
                     设置定时发送
@@ -431,9 +468,7 @@ export function App() {
                     立即发送
                   </button>
                 </div>
-
                 {publishOutput && <pre className="output">{publishOutput}</pre>}
-
                 <div className="log-list">
                   <h3>执行日志</h3>
                   {queueLogs.length === 0 && <p>暂无日志。</p>}
@@ -492,7 +527,7 @@ export function App() {
             <hr />
 
             <h2>代理配置</h2>
-            <p>用于发布接口请求的网络代理。支持 VPN/本地代理地址。</p>
+            <p>用于发布接口请求和币种搜索请求的网络代理。支持 VPN/本地代理地址。</p>
             <label className="inline">
               <input
                 type="checkbox"

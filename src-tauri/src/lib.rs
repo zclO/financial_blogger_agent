@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, process::Command};
 use tauri::{AppHandle, Manager};
+use reqwest::Client;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +42,29 @@ pub struct Workspace {
 pub struct BinanceSquareProxyConfig {
     pub enabled: bool,
     pub proxy_url: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BinanceSymbolSearchItem {
+    pub symbol: String,
+    pub base_asset: String,
+    pub quote_asset: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BinanceExchangeInfo {
+    symbols: Vec<BinanceExchangeSymbol>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BinanceExchangeSymbol {
+    symbol: String,
+    status: String,
+    base_asset: String,
+    quote_asset: String,
 }
 
 fn file(app: &AppHandle) -> Result<PathBuf, String> {
@@ -211,6 +235,18 @@ fn square(app: &AppHandle, script: &str, args: &[&str], key: Option<&str>) -> Re
     }
 }
 
+fn build_http_client(app: &AppHandle) -> Result<Client, String> {
+    let mut builder = Client::builder().timeout(std::time::Duration::from_secs(15));
+    let proxy = load_proxy_config(app);
+    if proxy.enabled {
+        if let Some(proxy_url) = proxy.proxy_url {
+            let px = reqwest::Proxy::all(&proxy_url).map_err(|e| format!("代理配置无效: {}", e))?;
+            builder = builder.proxy(px);
+        }
+    }
+    builder.build().map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
+}
+
 #[tauri::command]
 fn get_binance_square_config(app: AppHandle) -> serde_json::Value {
     serde_json::json!({
@@ -277,6 +313,62 @@ fn set_binance_square_proxy_config(
     Ok("代理配置已保存。".into())
 }
 
+#[tauri::command]
+async fn search_binance_symbols(
+    app: AppHandle,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<BinanceSymbolSearchItem>, String> {
+    let q = query.trim().to_uppercase();
+    if q.len() < 2 {
+        return Ok(Vec::new());
+    }
+    let max = limit.unwrap_or(20).clamp(1, 100);
+
+    let client = build_http_client(&app)?;
+    let res = client
+        .get("https://api.binance.com/api/v3/exchangeInfo")
+        .send()
+        .await
+        .map_err(|e| format!("币种搜索请求失败: {}", e))?;
+
+    if !res.status().is_success() {
+        return Err(format!("币种搜索接口返回异常: {}", res.status()));
+    }
+
+    let info: BinanceExchangeInfo = res
+        .json()
+        .await
+        .map_err(|e| format!("币种搜索结果解析失败: {}", e))?;
+
+    let items = info
+        .symbols
+        .into_iter()
+        .filter(|s| {
+            s.status == "TRADING"
+                && (s.quote_asset == "USDT" || s.quote_asset == "FDUSD" || s.quote_asset == "USDC")
+                && (s.symbol.contains(&q) || s.base_asset.contains(&q))
+        })
+        .map(|s| BinanceSymbolSearchItem {
+            symbol: s.base_asset.clone(),
+            base_asset: s.base_asset,
+            quote_asset: s.quote_asset,
+        })
+        .collect::<Vec<_>>();
+
+    let mut dedup = std::collections::HashSet::<String>::new();
+    let mut out = Vec::new();
+    for item in items {
+        if dedup.insert(item.symbol.clone()) {
+            out.push(item);
+        }
+        if out.len() >= max {
+            break;
+        }
+    }
+    Ok(out)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -289,7 +381,8 @@ pub fn run() {
             configure_binance_square,
             publish_binance_square_text,
             get_binance_square_proxy_config,
-            set_binance_square_proxy_config
+            set_binance_square_proxy_config,
+            search_binance_symbols
         ])
         .run(tauri::generate_context!())
         .expect("error while running Financial Blogger Agent");
