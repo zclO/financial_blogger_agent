@@ -226,6 +226,25 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.actions button.active {
+  background: #0f4c5c;
+  border-color: #0f4c5c;
+  color: #ffffff;
+}
+
+.symbol-search-box {
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fcfcfd;
+  padding: 10px 12px;
+}
+
 .settings .setting-grid {
   margin-top: 12px;
   display: grid;

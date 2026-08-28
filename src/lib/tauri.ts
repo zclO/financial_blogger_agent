@@ -37,8 +37,18 @@ export function configureBinanceSquare(apiKey: string): Promise<string> {
 export function publishBinanceSquareText(payload: {
   title?: string;
   text: string;
+  contentType?: "post" | "article" | "video";
+  videoUrl?: string;
 }): Promise<string> {
   return invoke<string>("publish_binance_square_text", payload);
+}
+
+export function publishBinanceSquareVideoFile(payload: {
+  text: string;
+  videoPath: string;
+  title?: string;
+}): Promise<string> {
+  return invoke<string>("publish_binance_square_video_file", payload);
 }
 
 export function getBinanceSquareProxyConfig(): Promise<BinanceSquareProxyConfig> {

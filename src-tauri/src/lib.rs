@@ -182,6 +182,7 @@ fn square_dir(app: &AppHandle) -> Result<PathBuf, String> {
     for dir in candidates {
         if dir.join("scripts").join("save-key.mjs").exists()
             && dir.join("scripts").join("post-text.mjs").exists()
+            && dir.join("scripts").join("post-video.mjs").exists()
         {
             return Ok(dir);
         }
@@ -266,17 +267,56 @@ fn publish_binance_square_text(
     app: AppHandle,
     title: Option<String>,
     text: String,
+    content_type: Option<String>,
+    video_url: Option<String>,
 ) -> Result<String, String> {
     if text.trim().is_empty() {
         return Err("正文不能为空".into());
     }
     let mut args = vec!["--text", text.as_str()];
+    if let Some(ct) = content_type.as_deref() {
+        if !ct.trim().is_empty() {
+            args.extend(["--contentType", ct.trim()]);
+        }
+    }
     if let Some(t) = title.as_deref() {
         if !t.trim().is_empty() {
             args.extend(["--title", t]);
         }
     }
+    if let Some(v) = video_url.as_deref() {
+        if !v.trim().is_empty() {
+            args.extend(["--videoUrl", v.trim()]);
+        }
+    }
     square(&app, "post-text.mjs", &args, None)
+}
+
+#[tauri::command]
+fn publish_binance_square_video_file(
+    app: AppHandle,
+    text: String,
+    video_path: String,
+    title: Option<String>,
+) -> Result<String, String> {
+    let path = PathBuf::from(video_path);
+    if !path.exists() {
+        return Err("视频文件不存在。".into());
+    }
+    if !path.is_file() {
+        return Err("视频路径不是文件。".into());
+    }
+    let path_str = path.to_string_lossy().to_string();
+    let mut args = vec!["--video", path_str.as_str()];
+    if !text.trim().is_empty() {
+        args.extend(["--text", text.trim()]);
+    }
+    if let Some(t) = title.as_deref() {
+        if !t.trim().is_empty() {
+            args.extend(["--title", t.trim()]);
+        }
+    }
+    square(&app, "post-video.mjs", &args, None)
 }
 
 #[tauri::command]
@@ -371,6 +411,7 @@ async fn search_binance_symbols(
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
@@ -380,6 +421,7 @@ pub fn run() {
             get_binance_square_config,
             configure_binance_square,
             publish_binance_square_text,
+            publish_binance_square_video_file,
             get_binance_square_proxy_config,
             set_binance_square_proxy_config,
             search_binance_symbols

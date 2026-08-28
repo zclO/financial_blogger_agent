@@ -1,3 +1,4 @@
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useMemo, useState } from "react";
 
@@ -6,6 +7,7 @@ import {
   getBinanceSquareConfig,
   getBinanceSquareProxyConfig,
   publishBinanceSquareText,
+  publishBinanceSquareVideoFile,
   searchBinanceSymbols,
   setBinanceSquareProxyConfig,
   type BinanceSquareConfig,
@@ -14,8 +16,19 @@ import {
 } from "../lib/tauri";
 
 type Tab = "仪表盘" | "选题池" | "内容工坊" | "发布队列" | "设置";
+type PublishType = "post" | "article" | "video";
+type VideoSourceType = "url" | "local";
 type Topic = { id: number; title: string; source: string; verified: boolean };
-type Draft = { title: string; body: string; reviewed: boolean; queued: boolean };
+type Draft = {
+  title: string;
+  body: string;
+  reviewed: boolean;
+  queued: boolean;
+  publishType: PublishType;
+  videoSourceType: VideoSourceType;
+  videoUrl: string;
+  videoFilePath: string;
+};
 type PublishState = "idle" | "scheduled" | "sending" | "sent" | "failed";
 
 const tabs: Tab[] = ["仪表盘", "选题池", "内容工坊", "发布队列", "设置"];
@@ -58,6 +71,10 @@ export function App() {
     body: "【市场信息整理】\n\n以官方公告为准，等待更多数据交叉验证。\n\n信息整理，不构成投资建议。",
     reviewed: false,
     queued: false,
+    publishType: "post",
+    videoSourceType: "url",
+    videoUrl: "",
+    videoFilePath: "",
   });
   const [notice, setNotice] = useState("未连接外部数据源；当前仅使用本地演示数据。");
 
@@ -98,7 +115,7 @@ export function App() {
     });
 
   const appendQueueLog = (content: string) => {
-    setQueueLogs((prev) => [`[${nowText()}] ${content}`, ...prev].slice(0, 20));
+    setQueueLogs((prev) => [`[${nowText()}] ${content}`, ...prev].slice(0, 30));
   };
 
   const loadSquareConfig = async (showSuccess: boolean) => {
@@ -140,6 +157,7 @@ export function App() {
       setSymbolSearchNotice(query.length === 0 ? "" : "至少输入 2 个字符再搜索。");
       return;
     }
+
     const timer = window.setTimeout(async () => {
       setSymbolSearching(true);
       setSymbolSearchNotice("");
@@ -154,27 +172,51 @@ export function App() {
         setSymbolSearching(false);
       }
     }, 350);
+
     return () => window.clearTimeout(timer);
   }, [symbolQuery]);
+
+  const chooseLocalVideoFile = async () => {
+    try {
+      const selected = await openFileDialog({
+        multiple: false,
+        directory: false,
+        filters: [{ name: "Video", extensions: ["mp4", "mov", "avi", "webm", "mkv"] }],
+      });
+      if (typeof selected === "string" && selected.trim()) {
+        setDraft((prev) => ({ ...prev, videoFilePath: selected }));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setNotice(`选择文件失败：${message}`);
+    }
+  };
 
   const addSymbolFromSearch = (symbol: string) => {
     const merged = Array.from(new Set([...manualSymbols, symbol.toUpperCase()]));
     setManualSymbolsInput(merged.join(","));
   };
 
+  const validateDraftForQueue = (): string | null => {
+    if (!draft.body.includes("不构成投资建议")) return "草稿必须保留“信息整理，不构成投资建议”。";
+    if (allSymbols.length === 0) return "请至少添加一个相关币种，系统会自动附加 #币种 与 $币种 标签。";
+    if (draft.publishType === "article" && !draft.title.trim()) return "文章类型必须填写标题。";
+    if (draft.publishType === "video" && draft.videoSourceType === "url" && !draft.videoUrl.trim()) return "视频类型（链接）必须填写视频链接。";
+    if (draft.publishType === "video" && draft.videoSourceType === "local" && !draft.videoFilePath.trim())
+      return "视频类型（本地文件）必须选择本地视频文件。";
+    return null;
+  };
+
   const queueDraft = () => {
-    if (!draft.body.includes("不构成投资建议")) {
-      setNotice("草稿必须保留“信息整理，不构成投资建议”。");
-      return;
-    }
-    if (allSymbols.length === 0) {
-      setNotice("请至少添加一个相关币种，系统会自动附加 #币种 与 $币种 标签。");
+    const error = validateDraftForQueue();
+    if (error) {
+      setNotice(error);
       return;
     }
     setDraft((prev) => ({ ...prev, queued: true }));
     setPublishState("idle");
     setPublishOutput("");
-    appendQueueLog(`草稿进入发布队列；标签：${allSymbols.join(", ")}`);
+    appendQueueLog(`草稿进入发布队列；类型：${draft.publishType}；标签：${allSymbols.join(", ")}`);
     setNotice("已进入发布队列。");
     setTab("发布队列");
   };
@@ -248,17 +290,28 @@ export function App() {
       setNotice("Square OpenAPI Key 未配置，无法发送。");
       return;
     }
-    if (allSymbols.length === 0) {
-      setNotice("缺少币种标签，无法发送。");
+    const error = validateDraftForQueue();
+    if (error) {
+      setNotice(error);
       return;
     }
 
     setPublishState("sending");
     try {
-      const result = await publishBinanceSquareText({
-        title: draft.title,
-        text: finalPublishBody,
-      });
+      const result =
+        draft.publishType === "video" && draft.videoSourceType === "local"
+          ? await publishBinanceSquareVideoFile({
+              title: draft.title || undefined,
+              text: finalPublishBody,
+              videoPath: draft.videoFilePath,
+            })
+          : await publishBinanceSquareText({
+              title: draft.title || undefined,
+              text: finalPublishBody,
+              contentType: draft.publishType,
+              videoUrl: draft.publishType === "video" ? draft.videoUrl : undefined,
+            });
+
       setPublishOutput(result.trim());
       setPublishState("sent");
       setDraft((prev) => ({ ...prev, queued: false }));
@@ -318,7 +371,7 @@ export function App() {
       }
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [allowScheduledPublish, draft.queued, publishState, scheduleAtInput]); 
+  }, [allowScheduledPublish, draft.queued, publishState, scheduleAtInput]); // publishNow uses current state values
 
   return (
     <div className="app">
@@ -374,20 +427,92 @@ export function App() {
         {tab === "内容工坊" && (
           <section className="panel">
             <h2>内容编辑</h2>
+            <div className="actions">
+              <button
+                type="button"
+                className={draft.publishType === "post" ? "active" : ""}
+                onClick={() => setDraft((prev) => ({ ...prev, publishType: "post" }))}
+              >
+                帖子
+              </button>
+              <button
+                type="button"
+                className={draft.publishType === "article" ? "active" : ""}
+                onClick={() => setDraft((prev) => ({ ...prev, publishType: "article" }))}
+              >
+                文章
+              </button>
+              <button
+                type="button"
+                className={draft.publishType === "video" ? "active" : ""}
+                onClick={() => setDraft((prev) => ({ ...prev, publishType: "video" }))}
+              >
+                视频
+              </button>
+            </div>
+
             <label>
               标题
               <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
             </label>
+
+            {draft.publishType === "video" && (
+              <>
+                <div className="actions">
+                  <button
+                    type="button"
+                    className={draft.videoSourceType === "url" ? "active" : ""}
+                    onClick={() => setDraft((prev) => ({ ...prev, videoSourceType: "url" }))}
+                  >
+                    视频链接
+                  </button>
+                  <button
+                    type="button"
+                    className={draft.videoSourceType === "local" ? "active" : ""}
+                    onClick={() => setDraft((prev) => ({ ...prev, videoSourceType: "local" }))}
+                  >
+                    本地文件上传
+                  </button>
+                </div>
+
+                {draft.videoSourceType === "url" ? (
+                  <label>
+                    视频链接
+                    <input
+                      value={draft.videoUrl}
+                      onChange={(e) => setDraft({ ...draft, videoUrl: e.target.value })}
+                      placeholder="https://..."
+                    />
+                  </label>
+                ) : (
+                  <label>
+                    本地视频文件
+                    <div className="actions">
+                      <button type="button" onClick={() => void chooseLocalVideoFile()}>
+                        选择文件
+                      </button>
+                      <input
+                        value={draft.videoFilePath}
+                        onChange={(e) => setDraft({ ...draft, videoFilePath: e.target.value })}
+                        placeholder="已选择文件路径，或手动输入绝对路径"
+                      />
+                    </div>
+                  </label>
+                )}
+              </>
+            )}
+
             <label>
               正文
               <textarea rows={12} value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
             </label>
+
             <label>
               搜索币种（官方接口）
               <input
                 value={symbolQuery}
                 onChange={(e) => setSymbolQuery(e.target.value)}
-                placeholder="输入 BTC / ETH / SOL / 比特币 对应英文缩写"
+                placeholder="输入 BTC / ETH / SOL 等符号"
               />
             </label>
             <div className="symbol-search-box">
@@ -401,6 +526,7 @@ export function App() {
                 ))}
               </div>
             </div>
+
             <label>
               手动补充币种（逗号分隔）
               <input value={manualSymbolsInput} onChange={(e) => setManualSymbolsInput(e.target.value)} placeholder="例如 BTC,ETH,SOL" />
@@ -425,8 +551,30 @@ export function App() {
               <>
                 <div className="kv">
                   <span className="key">队列稿件</span>
-                  <span className="value">{draft.title}</span>
+                  <span className="value">{draft.title || "(无标题)"}</span>
                 </div>
+                <div className="kv">
+                  <span className="key">内容类型</span>
+                  <span className="value">{draft.publishType}</span>
+                </div>
+                {draft.publishType === "video" && (
+                  <div className="kv">
+                    <span className="key">视频来源</span>
+                    <span className="value">{draft.videoSourceType === "local" ? "本地文件上传" : "视频链接"}</span>
+                  </div>
+                )}
+                {draft.publishType === "video" && draft.videoSourceType === "url" && (
+                  <div className="kv">
+                    <span className="key">视频链接</span>
+                    <span className="value">{draft.videoUrl}</span>
+                  </div>
+                )}
+                {draft.publishType === "video" && draft.videoSourceType === "local" && (
+                  <div className="kv">
+                    <span className="key">本地视频文件</span>
+                    <span className="value">{draft.videoFilePath}</span>
+                  </div>
+                )}
                 <div className="kv">
                   <span className="key">发送状态</span>
                   <span className={`status ${publishState === "sent" ? "ok" : ""}`}>
