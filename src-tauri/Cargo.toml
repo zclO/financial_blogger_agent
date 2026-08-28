@@ -1,0 +1,18 @@
+[package]
+name = "financial-blogger-agent"
+version = "0.1.0"
+description = "A compliant financial-content production desktop application"
+authors = ["Financial Blogger Agent Team"]
+edition = "2021"
+
+[lib]
+name = "financial_blogger_agent_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-store = "2"

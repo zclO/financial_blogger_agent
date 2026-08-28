@@ -1,2 +1,8 @@
+/node_modules
+/dist
 /target
-.idea
+/src-tauri/target
+/.idea
+.env
+.env.*
+!.env.example

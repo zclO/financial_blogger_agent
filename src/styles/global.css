@@ -1,0 +1,18 @@
+:root {
+  color: #e8edf7;
+  background: #0b1020;
+  font-family: Inter, "Microsoft YaHei", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+
+.shell { max-width: 1040px; margin: 0 auto; padding: 72px 32px 36px; }
+.eyebrow { color: #7fa3ff; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; }
+h1 { margin: 8px 0; font-size: clamp(32px, 7vw, 54px); }
+header > p:last-child { color: #aab7d0; }
+.module-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin: 48px 0; }
+.module-card { min-height: 140px; padding: 20px; border: 1px solid #26324d; border-radius: 14px; background: #121a2d; }
+.module-card h2 { margin-top: 0; font-size: 18px; }
+.module-card p, footer { color: #aab7d0; }
+footer { display: flex; gap: 18px; font-size: 13px; }
