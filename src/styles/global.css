@@ -1,18 +1,194 @@
 :root {
-  color: #e8edf7;
-  background: #0b1020;
-  font-family: Inter, "Microsoft YaHei", system-ui, sans-serif;
+    font-family: Inter, "Microsoft YaHei", sans-serif;
+    background: #0a1020;
+    color: #eaf0ff
 }
 
-* { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; }
+* {
+    box-sizing: border-box
+}
 
-.shell { max-width: 1040px; margin: 0 auto; padding: 72px 32px 36px; }
-.eyebrow { color: #7fa3ff; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; }
-h1 { margin: 8px 0; font-size: clamp(32px, 7vw, 54px); }
-header > p:last-child { color: #aab7d0; }
-.module-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin: 48px 0; }
-.module-card { min-height: 140px; padding: 20px; border: 1px solid #26324d; border-radius: 14px; background: #121a2d; }
-.module-card h2 { margin-top: 0; font-size: 18px; }
-.module-card p, footer { color: #aab7d0; }
-footer { display: flex; gap: 18px; font-size: 13px; }
+body {
+    margin: 0
+}
+
+.app {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns:240px 1fr
+}
+
+aside {
+    padding: 26px 16px;
+    background: #0c1426;
+    border-right: 1px solid #263653
+}
+
+aside b, aside small {
+    display: block;
+    margin: 0 8px 10px
+}
+
+aside small, aside p {
+    color: #93a2bf;
+    font-size: 12px;
+    line-height: 1.6
+}
+
+aside p {
+    margin-top: 40px
+}
+
+aside button {
+    display: block;
+    width: 100%;
+    padding: 11px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #b9c7df;
+    text-align: left;
+    font: inherit
+}
+
+aside button.active, aside button:hover {
+    background: #1a2a4a;
+    color: #fff
+}
+
+main {
+    max-width: 1160px;
+    width: 100%;
+    margin: auto;
+    padding: 36px
+}
+
+header {
+    display: flex;
+    justify-content: space-between
+}
+
+header em {
+    font-size: 11px;
+    color: #84a8ff;
+    font-style: normal;
+    letter-spacing: .12em
+}
+
+h1 {
+    margin: 7px 0 0
+}
+
+.notice, .panel, article {
+    background: #10192c;
+    border: 1px solid #293b5a;
+    border-radius: 12px
+}
+
+.notice {
+    padding: 11px 14px;
+    margin: 24px 0;
+    color: #b6c9ed;
+    font-size: 13px
+}
+
+.metrics {
+    display: grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap: 15px;
+    margin-bottom: 18px
+}
+
+.metrics article {
+    padding: 20px
+}
+
+.metrics strong, .metrics small {
+    display: block
+}
+
+.metrics strong {
+    font-size: 32px;
+    margin-top: 8px
+}
+
+.panel {
+    padding: 22px
+}
+
+.row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 0;
+    border-top: 1px solid #293b5a
+}
+
+.row small {
+    display: block;
+    color: #9aaac5;
+    margin-top: 6px
+}
+
+label {
+    display: grid;
+    gap: 8px;
+    margin: 16px 0
+}
+
+input, textarea {
+    padding: 10px;
+    background: #091225;
+    border: 1px solid #41577f;
+    border-radius: 7px;
+    color: #fff;
+    font: inherit
+}
+
+button {
+    padding: 8px 12px;
+    border-radius: 7px;
+    border: 1px solid #78a1ff;
+    background: #78a1ff;
+    color: #081020;
+    font-weight: 700;
+    cursor: pointer
+}
+
+button:disabled {
+    opacity: .45
+}
+
+@media (max-width: 700px) {
+    .app {
+        grid-template-columns:1fr
+    }
+
+    aside {
+        display: flex;
+        gap: 5px;
+        overflow: auto;
+        padding: 12px
+    }
+
+    aside small, aside p {
+        display: none
+    }
+
+    aside button {
+        width: auto;
+        white-space: nowrap
+    }
+
+    main {
+        padding: 20px
+    }
+
+    .metrics {
+        grid-template-columns:1fr
+    }
+
+    .row {
+        gap: 15px
+    }
+}
