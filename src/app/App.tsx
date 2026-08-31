@@ -12,64 +12,23 @@ import {
   setBinanceSquareProxyConfig,
   type BinanceSquareConfig,
   type BinanceSquareProxyConfig,
-  type BinanceSymbolSearchItem,
 } from "../lib/tauri";
 import { ComposerPanel } from "../features/workbench/components/ComposerPanel";
-
-type Tab = "仪表盘" | "选题池" | "内容工坊" | "发布队列" | "设置";
-type PublishType = "post" | "article" | "video";
-type VideoSourceType = "url" | "local";
-type Topic = { id: number; title: string; source: string; verified: boolean };
-type Draft = {
-  title: string;
-  body: string;
-  reviewed: boolean;
-  queued: boolean;
-  publishType: PublishType;
-  videoSourceType: VideoSourceType;
-  videoUrl: string;
-  videoFilePath: string;
-};
-type PublishState = "idle" | "scheduled" | "sending" | "sent" | "failed";
-
-const tabs: Tab[] = ["仪表盘", "选题池", "内容工坊", "发布队列", "设置"];
-const defaultTopics: Topic[] = [
-  { id: 1, title: "以太坊生态升级官方公告", source: "项目官方 API（示例）", verified: true },
-  { id: 2, title: "BTC ETF 日度资金数据待核验", source: "授权行情源（示例）", verified: false },
-];
-
-function normalizeSymbols(input: string): string[] {
-  return Array.from(
-    new Set(
-      input
-        .split(/[,\s，、]+/)
-        .map((x) => x.trim().toUpperCase())
-        .filter((x) => /^[A-Z][A-Z0-9]{1,9}$/.test(x)),
-    ),
-  );
-}
-
-function extractTaggedSymbols(body: string): string[] {
-  const matched = body.match(/[#$]([A-Za-z][A-Za-z0-9]{1,9})/g) ?? [];
-  return Array.from(new Set(matched.map((x) => x.slice(1).toUpperCase())));
-}
-
-function buildFinalBody(body: string, symbols: string[]): string {
-  if (symbols.length === 0) return body;
-  const existing = new Set<string>();
-  for (const item of extractTaggedSymbols(body)) existing.add(item);
-  const missing = symbols.filter((s) => !existing.has(s));
-  if (missing.length === 0) return body;
-  const tags = missing.flatMap((s) => [`#${s}`, `$${s}`]).join(" ");
-  return `${body.trim()}\n\n${tags}`;
-}
+import { MetricCard } from "../features/workbench/components/MetricCard";
+import { QueuePanel } from "../features/workbench/components/QueuePanel";
+import { SettingsPanel } from "../features/workbench/components/SettingsPanel";
+import { Sidebar } from "../features/workbench/components/Sidebar";
+import { TopicsPanel } from "../features/workbench/components/TopicsPanel";
+import { DEFAULT_DRAFT_BODY, DEFAULT_TOPICS, TABS } from "../features/workbench/constants";
+import type { Draft, PublishState, Tab, Topic } from "../features/workbench/types";
+import { buildFinalBody, extractTaggedSymbols, normalizeSymbols } from "../features/workbench/utils";
 
 export function App() {
   const [tab, setTab] = useState<Tab>("仪表盘");
-  const [topics, setTopics] = useState<Topic[]>(defaultTopics);
+  const [topics, setTopics] = useState<Topic[]>(DEFAULT_TOPICS);
   const [draft, setDraft] = useState<Draft>({
-    title: defaultTopics[0].title,
-    body: "【市场信息整理】\n\n以官方公告为准，等待更多数据交叉验证。\n\n信息整理，不构成投资建议。",
+    title: DEFAULT_TOPICS[0].title,
+    body: DEFAULT_DRAFT_BODY,
     reviewed: false,
     queued: false,
     publishType: "post",
@@ -96,7 +55,7 @@ export function App() {
   const [symbolQuery, setSymbolQuery] = useState("");
   const [symbolSearching, setSymbolSearching] = useState(false);
   const [symbolSearchNotice, setSymbolSearchNotice] = useState("");
-  const [symbolSearchResults, setSymbolSearchResults] = useState<BinanceSymbolSearchItem[]>([]);
+  const [symbolSearchResults, setSymbolSearchResults] = useState<Awaited<ReturnType<typeof searchBinanceSymbols>>>([]);
   const [composerError, setComposerError] = useState("");
 
   const [allowScheduledPublish, setAllowScheduledPublish] = useState(false);
@@ -114,11 +73,6 @@ export function App() {
   useEffect(() => {
     setComposerError("");
   }, [draft, manualSymbolsInput]);
-
-  const nowText = () =>
-    new Date().toLocaleString("zh-CN", {
-      hour12: false,
-    });
 
   const appendQueueLog = (content: string) => {
     setQueueLogs((prev) => [`[${nowText()}] ${content}`, ...prev].slice(0, 30));
@@ -385,22 +339,15 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [allowScheduledPublish, draft.queued, publishState, scheduleAtInput]); // publishNow uses current state values
 
+  const verifyTopic = (id: number) => {
+    setTopics(topics.map((x) => (x.id === id ? { ...x, verified: true } : x)));
+  };
+
+  const openComposer = () => setTab("内容工坊");
+
   return (
     <div className="app">
-      <aside className="sidebar">
-        <div className="brand">
-          <b>财经内容工作台</b>
-          <small>本地优先 · 审核优先</small>
-        </div>
-        <nav className="nav">
-          {tabs.map((item) => (
-            <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>
-              {item}
-            </button>
-          ))}
-        </nav>
-        <p>真实发布默认关闭，需完成授权、来源备案与审核配置。</p>
-      </aside>
+      <Sidebar tab={tab} tabs={TABS} onChangeTab={setTab} />
 
       <main className="content">
         <header className="topbar">
@@ -416,25 +363,15 @@ export function App() {
         {tab === "仪表盘" && (
           <>
             <section className="metrics">
-              <Card n={topics.length - verifiedCount} t="待核验选题" />
-              <Card n={verifiedCount} t="可生成草稿" />
-              <Card n={draft.queued ? 1 : 0} t="待人工发布" />
+              <MetricCard n={topics.length - verifiedCount} t="待核验选题" />
+              <MetricCard n={verifiedCount} t="可生成草稿" />
+              <MetricCard n={draft.queued ? 1 : 0} t="待人工发布" />
             </section>
-            <Topics
-              topics={topics}
-              verify={(id) => setTopics(topics.map((x) => (x.id === id ? { ...x, verified: true } : x)))}
-              open={() => setTab("内容工坊")}
-            />
+            <TopicsPanel topics={topics} verify={verifyTopic} openComposer={openComposer} />
           </>
         )}
 
-        {tab === "选题池" && (
-          <Topics
-            topics={topics}
-            verify={(id) => setTopics(topics.map((x) => (x.id === id ? { ...x, verified: true } : x)))}
-            open={() => setTab("内容工坊")}
-          />
-        )}
+        {tab === "选题池" && <TopicsPanel topics={topics} verify={verifyTopic} openComposer={openComposer} />}
 
         {tab === "内容工坊" && (
           <ComposerPanel
@@ -458,194 +395,54 @@ export function App() {
         )}
 
         {tab === "发布队列" && (
-          <section className="panel settings">
-            <h2>发布队列</h2>
-            {!draft.queued && <p>暂无待发送内容。请先在内容工坊提交草稿。</p>}
-            {draft.queued && (
-              <>
-                <div className="kv">
-                  <span className="key">队列稿件</span>
-                  <span className="value">{draft.title || "(无标题)"}</span>
-                </div>
-                <div className="kv">
-                  <span className="key">内容类型</span>
-                  <span className="value">{draft.publishType}</span>
-                </div>
-                {draft.publishType === "video" && (
-                  <div className="kv">
-                    <span className="key">视频来源</span>
-                    <span className="value">{draft.videoSourceType === "local" ? "本地文件上传" : "视频链接"}</span>
-                  </div>
-                )}
-                {draft.publishType === "video" && draft.videoSourceType === "url" && (
-                  <div className="kv">
-                    <span className="key">视频链接</span>
-                    <span className="value">{draft.videoUrl}</span>
-                  </div>
-                )}
-                {draft.publishType === "video" && draft.videoSourceType === "local" && (
-                  <div className="kv">
-                    <span className="key">本地视频文件</span>
-                    <span className="value">{draft.videoFilePath}</span>
-                  </div>
-                )}
-                <div className="kv">
-                  <span className="key">发送状态</span>
-                  <span className={`status ${publishState === "sent" ? "ok" : ""}`}>
-                    {publishState === "idle" && "待发送"}
-                    {publishState === "scheduled" && "已定时"}
-                    {publishState === "sending" && "发送中"}
-                    {publishState === "sent" && "已发送"}
-                    {publishState === "failed" && "发送失败"}
-                  </span>
-                </div>
-                <p className="hint">本次发送标签：{allSymbols.map((s) => `#${s} $${s}`).join(" ")}</p>
-                <details>
-                  <summary>查看最终发送文本</summary>
-                  <pre className="output">{finalPublishBody}</pre>
-                </details>
-                <label className="inline">
-                  <input
-                    type="checkbox"
-                    checked={allowScheduledPublish}
-                    onChange={(e) => {
-                      setAllowScheduledPublish(e.target.checked);
-                      appendQueueLog(e.target.checked ? "已开启定时发送执行开关。" : "已关闭定时发送执行开关。");
-                    }}
-                  />
-                  允许执行定时发送（人工暂停开关）
-                </label>
-                <label>
-                  发送时间
-                  <input type="datetime-local" value={scheduleAtInput} onChange={(e) => setScheduleAtInput(e.target.value)} />
-                </label>
-                <div className="actions">
-                  <button disabled={publishState === "sending"} onClick={schedulePublish}>
-                    设置定时发送
-                  </button>
-                  <button disabled={publishState === "sending" || publishState !== "scheduled"} onClick={cancelSchedule}>
-                    取消定时
-                  </button>
-                  <button disabled={publishState === "sending"} onClick={() => void publishNow("manual")}>
-                    立即发送
-                  </button>
-                </div>
-                {publishOutput && <pre className="output">{publishOutput}</pre>}
-                <div className="log-list">
-                  <h3>执行日志</h3>
-                  {queueLogs.length === 0 && <p>暂无日志。</p>}
-                  {queueLogs.map((log) => (
-                    <p key={log}>{log}</p>
-                  ))}
-                </div>
-              </>
-            )}
-          </section>
+          <QueuePanel
+            draft={draft}
+            publishState={publishState}
+            allSymbols={allSymbols}
+            finalPublishBody={finalPublishBody}
+            allowScheduledPublish={allowScheduledPublish}
+            onToggleScheduled={(v) => {
+              setAllowScheduledPublish(v);
+              appendQueueLog(v ? "已开启定时发送执行开关。" : "已关闭定时发送执行开关。");
+            }}
+            scheduleAtInput={scheduleAtInput}
+            setScheduleAtInput={setScheduleAtInput}
+            schedulePublish={schedulePublish}
+            cancelSchedule={cancelSchedule}
+            publishNow={() => void publishNow("manual")}
+            publishOutput={publishOutput}
+            queueLogs={queueLogs}
+          />
         )}
 
         {tab === "设置" && (
-          <section className="panel settings">
-            <h2>数据源与自动化策略</h2>
-            <p>自动发布：关闭。仅在授权、溯源、风险检查通过后，才可按策略自动发布。</p>
-            <p>密钥仅通过 Rust 侧安全存储，前端不保存 Token 或 Cookie。</p>
-
-            <div className="setting-grid">
-              <div className="kv">
-                <span className="key">Square OpenAPI Key 状态</span>
-                <span className={squareConfig?.keyConfigured ? "status ok" : "status"}>
-                  {squareConfig?.keyConfigured ? "已配置" : "未配置"}
-                </span>
-              </div>
-              <div className="kv">
-                <span className="key">最近刷新</span>
-                <span className="value">{lastRefreshTime || "未刷新"}</span>
-              </div>
-            </div>
-
-            <label>
-              Square OpenAPI Key
-              <input
-                type="password"
-                autoComplete="off"
-                value={squareKeyInput}
-                onChange={(e) => setSquareKeyInput(e.target.value)}
-                placeholder="输入后仅用于调用 Rust 命令保存"
-              />
-            </label>
-
-            <div className="actions">
-              <button disabled={squareLoading} onClick={saveSquareKey}>
-                {squareLoading ? "保存中..." : "保存 Key"}
-              </button>
-              <button disabled={refreshingSquare || squareLoading} onClick={() => void loadSquareConfig(true)}>
-                {refreshingSquare ? "刷新中..." : "刷新状态"}
-              </button>
-              <button disabled={openingSquare || !squareConfig} onClick={openSquareCenter}>
-                {openingSquare ? "打开中..." : "打开 Creator Center"}
-              </button>
-            </div>
-            {squareNotice && <div className="subnotice">{squareNotice}</div>}
-
-            <hr />
-
-            <h2>代理配置</h2>
-            <p>用于发布接口请求和币种搜索请求的网络代理。支持 VPN/本地代理地址。</p>
-            <label className="inline">
-              <input
-                type="checkbox"
-                checked={proxyConfig.enabled}
-                onChange={(e) => setProxyConfig((prev) => ({ ...prev, enabled: e.target.checked }))}
-              />
-              启用代理发送
-            </label>
-            <label>
-              代理地址
-              <input
-                value={proxyUrlInput}
-                onChange={(e) => setProxyUrlInput(e.target.value)}
-                placeholder="例如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080"
-              />
-            </label>
-            <div className="actions">
-              <button disabled={proxySaving} onClick={saveProxyConfig}>
-                {proxySaving ? "保存中..." : "保存代理配置"}
-              </button>
-              <button disabled={proxySaving} onClick={() => void loadProxyConfig()}>
-                重新加载
-              </button>
-            </div>
-            {proxyNotice && <div className="subnotice">{proxyNotice}</div>}
-          </section>
+          <SettingsPanel
+            squareConfig={squareConfig}
+            lastRefreshTime={lastRefreshTime}
+            squareKeyInput={squareKeyInput}
+            setSquareKeyInput={setSquareKeyInput}
+            squareNotice={squareNotice}
+            squareLoading={squareLoading}
+            refreshingSquare={refreshingSquare}
+            openingSquare={openingSquare}
+            onSaveSquareKey={() => void saveSquareKey()}
+            onRefreshSquare={() => void loadSquareConfig(true)}
+            onOpenSquareCenter={() => void openSquareCenter()}
+            proxyConfig={proxyConfig}
+            setProxyEnabled={(v) => setProxyConfig((prev) => ({ ...prev, enabled: v }))}
+            proxyUrlInput={proxyUrlInput}
+            setProxyUrlInput={setProxyUrlInput}
+            proxySaving={proxySaving}
+            proxyNotice={proxyNotice}
+            onSaveProxy={() => void saveProxyConfig()}
+            onReloadProxy={() => void loadProxyConfig()}
+          />
         )}
       </main>
     </div>
   );
 }
 
-function Card({ n, t }: { n: number; t: string }) {
-  return (
-    <article className="metric-card">
-      <small>{t}</small>
-      <strong>{n}</strong>
-    </article>
-  );
-}
-
-function Topics({ topics, verify, open }: { topics: Topic[]; verify: (id: number) => void; open: () => void }) {
-  return (
-    <section className="panel">
-      <h2>选题池</h2>
-      {topics.map((x) => (
-        <div className="row" key={x.id}>
-          <div>
-            <b>{x.title}</b>
-            <small>
-              {x.source} · {x.verified ? "已核验" : "待核验"}
-            </small>
-          </div>
-          {x.verified ? <button onClick={open}>编辑草稿</button> : <button onClick={() => verify(x.id)}>标为已核验</button>}
-        </div>
-      ))}
-    </section>
-  );
+function nowText() {
+  return new Date().toLocaleString("zh-CN", { hour12: false });
 }
