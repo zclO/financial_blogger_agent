@@ -1,13 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   loadDraftStore,
+  loadPublishQueue,
   publishBinanceSquareText,
   publishBinanceSquareVideoFile,
   saveDraftStore,
+  savePublishQueue,
   type BinanceSquareConfig,
+  type QueueEntryData,
 } from "../../../lib/tauri";
-import type { Draft, PublishState } from "../types";
+import type { Draft, PublishState, QueueEntryStatus } from "../types";
 import { nowText } from "../utils";
 
 export function usePublishing(
@@ -19,6 +22,8 @@ export function usePublishing(
   setNotice: (msg: string) => void,
   setTab: (tab: "发布队列") => void,
 ) {
+  const [queueEntries, setQueueEntries] = useState<QueueEntryData[]>([]);
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [allowScheduledPublish, setAllowScheduledPublish] = useState(false);
   const [scheduleAtInput, setScheduleAtInput] = useState("");
   const [publishState, setPublishState] = useState<PublishState>("idle");
@@ -26,31 +31,37 @@ export function usePublishing(
   const [queueLogs, setQueueLogs] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  // Ref for draft to use in save effect without causing re-runs
   const draftRef = useRef(draft);
   draftRef.current = draft;
 
   // ── Load from persistence on mount ──
   useEffect(() => {
-    loadDraftStore()
-      .then((store) => {
-        if (store.draft) {
+    Promise.all([loadDraftStore(), loadPublishQueue()])
+      .then(([draftStore, queueStore]) => {
+        if (draftStore.draft) {
           setDraft({
-            title: store.draft.title,
-            body: store.draft.body,
-            reviewed: store.draft.reviewed,
-            queued: store.draft.queued,
-            publishType: store.draft.publishType as Draft["publishType"],
-            videoSourceType: store.draft.videoSourceType as Draft["videoSourceType"],
-            videoUrl: store.draft.videoUrl,
-            videoFilePath: store.draft.videoFilePath,
+            title: draftStore.draft.title,
+            body: draftStore.draft.body,
+            reviewed: draftStore.draft.reviewed,
+            queued: draftStore.draft.queued,
+            publishType: draftStore.draft.publishType as Draft["publishType"],
+            videoSourceType: draftStore.draft.videoSourceType as Draft["videoSourceType"],
+            videoUrl: draftStore.draft.videoUrl,
+            videoFilePath: draftStore.draft.videoFilePath,
           });
         }
-        setQueueLogs(store.queueLogs);
-        setPublishState(store.publishState as PublishState || "idle");
-        setPublishOutput(store.publishOutput);
-        setScheduleAtInput(store.scheduleAtInput);
-        setAllowScheduledPublish(store.allowScheduledPublish);
+        setQueueLogs(draftStore.queueLogs);
+        setPublishState((draftStore.publishState as PublishState) || "idle");
+        setPublishOutput(draftStore.publishOutput);
+        setScheduleAtInput(draftStore.scheduleAtInput);
+        setAllowScheduledPublish(draftStore.allowScheduledPublish);
+
+        setQueueEntries(queueStore.entries);
+        // Auto-select the first pending entry, or the first entry
+        if (queueStore.entries.length > 0) {
+          const pending = queueStore.entries.find((e) => e.status === "pending" || e.status === "scheduled");
+          setSelectedEntryId(pending?.id ?? queueStore.entries[0].id);
+        }
         setLoaded(true);
       })
       .catch(() => { setLoaded(true); });
@@ -60,85 +71,139 @@ export function usePublishing(
   useEffect(() => {
     if (!loaded) return;
     const timer = setTimeout(() => {
-      saveDraftStore({
-        draft: {
-          title: draftRef.current.title,
-          body: draftRef.current.body,
-          reviewed: draftRef.current.reviewed,
-          queued: draftRef.current.queued,
-          publishType: draftRef.current.publishType,
-          videoSourceType: draftRef.current.videoSourceType,
-          videoUrl: draftRef.current.videoUrl,
-          videoFilePath: draftRef.current.videoFilePath,
-        },
-        queueLogs,
-        publishState,
-        publishOutput,
-        scheduleAtInput,
-        allowScheduledPublish,
-      }).catch((err) => console.error("Failed to save draft:", err));
+      Promise.all([
+        saveDraftStore({
+          draft: {
+            title: draftRef.current.title,
+            body: draftRef.current.body,
+            reviewed: draftRef.current.reviewed,
+            queued: draftRef.current.queued,
+            publishType: draftRef.current.publishType,
+            videoSourceType: draftRef.current.videoSourceType,
+            videoUrl: draftRef.current.videoUrl,
+            videoFilePath: draftRef.current.videoFilePath,
+          },
+          queueLogs,
+          publishState,
+          publishOutput,
+          scheduleAtInput,
+          allowScheduledPublish,
+        }),
+        savePublishQueue({ entries: queueEntries }),
+      ]).catch((err) => console.error("Failed to save:", err));
     }, 800);
     return () => clearTimeout(timer);
-  }, [draft, queueLogs, publishState, publishOutput, scheduleAtInput, allowScheduledPublish, loaded]);
+  }, [queueEntries, queueLogs, publishState, publishOutput, scheduleAtInput, allowScheduledPublish, loaded]);
 
-  const appendQueueLog = (content: string) => {
-    setQueueLogs((prev) => [`[${nowText()}] ${content}`, ...prev].slice(0, 30));
-  };
+  const appendQueueLog = useCallback((content: string) => {
+    setQueueLogs((prev) => [`[${nowText()}] ${content}`, ...prev].slice(0, 50));
+  }, []);
 
-  const publishNow = async (trigger: "manual" | "scheduled") => {
-    if (!draft.queued) {
-      setNotice("当前没有待发送草稿。");
+  const appendEntryLog = useCallback((entryId: string, content: string) => {
+    setQueueEntries((prev) =>
+      prev.map((e) =>
+        e.id === entryId ? { ...e, logs: [`[${nowText()}] ${content}`, ...e.logs] } : e,
+      ),
+    );
+  }, []);
+
+  const updateEntryStatus = useCallback((entryId: string, status: QueueEntryStatus, extra?: Partial<QueueEntryData>) => {
+    setQueueEntries((prev) =>
+      prev.map((e) => (e.id === entryId ? { ...e, status, ...extra } : e)),
+    );
+  }, []);
+
+  // ── Add draft to queue ──
+  const addToQueue = useCallback((
+    draftData: Draft,
+    finalBody: string,
+    symbols: string[],
+  ): string | null => {
+    const entryId = `qe-${Date.now()}`;
+    const newEntry: QueueEntryData = {
+      id: entryId,
+      title: draftData.title,
+      body: draftData.body,
+      finalBody,
+      publishType: draftData.publishType,
+      videoSourceType: draftData.videoSourceType,
+      videoUrl: draftData.videoUrl,
+      videoFilePath: draftData.videoFilePath,
+      symbols,
+      status: "pending",
+      createdAt: nowText(),
+      sentAt: null,
+      logs: [],
+    };
+    setQueueEntries((prev) => [newEntry, ...prev]);
+    setSelectedEntryId(entryId);
+    appendQueueLog(`新稿件加入队列：${draftData.title || "(无标题)"}；类型：${draftData.publishType}；标签：${symbols.join(", ")}`);
+    return null;
+  }, [appendQueueLog]);
+
+  // ── Publish a specific queue entry ──
+  const publishEntry = useCallback(async (entryId: string, trigger: "manual" | "scheduled") => {
+    const entry = queueEntries.find((e) => e.id === entryId);
+    if (!entry) {
+      setNotice("未找到该队列条目。");
       return;
     }
-    if (!draft.reviewed) {
-      setNotice("草稿未完成人工复核，禁止发送。");
+    if (entry.status === "sent") {
+      setNotice("该稿件已发送。");
       return;
     }
     if (!squareConfig?.keyConfigured) {
       setNotice("Square OpenAPI Key 未配置，无法发送。");
       return;
     }
-    const error = validateDraft();
-    if (error) {
-      setNotice(error);
-      return;
-    }
 
+    updateEntryStatus(entryId, "sending");
     setPublishState("sending");
+    setPublishOutput("");
+    appendEntryLog(entryId, trigger === "scheduled" ? "定时任务开始执行发送..." : "开始手动发送...");
+
     try {
       const result =
-        draft.publishType === "video" && draft.videoSourceType === "local"
+        entry.publishType === "video" && entry.videoSourceType === "local"
           ? await publishBinanceSquareVideoFile({
-              title: draft.title || undefined,
-              text: finalPublishBody,
-              videoPath: draft.videoFilePath,
+              title: entry.title || undefined,
+              text: entry.finalBody,
+              videoPath: entry.videoFilePath,
             })
           : await publishBinanceSquareText({
-              title: draft.title || undefined,
-              text: finalPublishBody,
-              contentType: draft.publishType,
-              videoUrl: draft.publishType === "video" ? draft.videoUrl : undefined,
+              title: entry.title || undefined,
+              text: entry.finalBody,
+              contentType: entry.publishType as "post" | "article" | "video",
+              videoUrl: entry.publishType === "video" ? entry.videoUrl : undefined,
             });
 
       setPublishOutput(result.trim());
       setPublishState("sent");
-      setDraft((prev) => ({ ...prev, queued: false }));
-      setScheduleAtInput("");
-      setAllowScheduledPublish(false);
-      appendQueueLog(trigger === "scheduled" ? "定时任务执行成功并发送。" : "手动发送成功。");
+      updateEntryStatus(entryId, "sent", { sentAt: nowText() });
+      appendEntryLog(entryId, trigger === "scheduled" ? "定时发送成功。" : "手动发送成功。");
+      appendQueueLog(trigger === "scheduled" ? `定时发送成功：${entry.title || "(无标题)"}` : `手动发送成功：${entry.title || "(无标题)"}`);
       setNotice("发送成功。");
+
+      // If this was the current draft, clear the queued state
+      if (draftRef.current.queued && draftRef.current.title === entry.title) {
+        setDraft((prev) => ({ ...prev, queued: false }));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setPublishState("failed");
       setPublishOutput(message);
-      appendQueueLog(trigger === "scheduled" ? `定时任务发送失败：${message}` : `手动发送失败：${message}`);
+      setPublishState("failed");
+      updateEntryStatus(entryId, "failed");
+      appendEntryLog(entryId, trigger === "scheduled" ? `定时发送失败：${message}` : `手动发送失败：${message}`);
+      appendQueueLog(trigger === "scheduled" ? `定时发送失败：${entry.title || "(无标题)"}：${message}` : `手动发送失败：${entry.title || "(无标题)"}：${message}`);
       setNotice("发送失败，请查看日志并重试。");
     }
-  };
+  }, [queueEntries, squareConfig, updateEntryStatus, appendEntryLog, appendQueueLog, setNotice, setDraft]);
 
-  const schedulePublish = () => {
-    if (!draft.queued) {
-      setNotice("当前没有待发送草稿。");
+  // ── Schedule a specific queue entry ──
+  const scheduleEntry = useCallback((entryId: string) => {
+    const entry = queueEntries.find((e) => e.id === entryId);
+    if (!entry) {
+      setNotice("未找到该队列条目。");
       return;
     }
     if (!allowScheduledPublish) {
@@ -158,30 +223,54 @@ export function usePublishing(
       setNotice("发送时间必须晚于当前时间。");
       return;
     }
+    updateEntryStatus(entryId, "scheduled");
     setPublishState("scheduled");
-    appendQueueLog(`已设置定时发送：${scheduleAtInput.replace("T", " ")}`);
+    appendEntryLog(entryId, `已设置定时发送：${scheduleAtInput.replace("T", " ")}`);
+    appendQueueLog(`已设置定时发送：${entry.title || "(无标题)"} - ${scheduleAtInput.replace("T", " ")}`);
     setNotice("定时发送已创建。");
-  };
+  }, [queueEntries, allowScheduledPublish, scheduleAtInput, updateEntryStatus, appendEntryLog, appendQueueLog, setNotice]);
 
-  const cancelSchedule = () => {
+  const cancelScheduleEntry = useCallback((entryId: string) => {
+    updateEntryStatus(entryId, "pending");
     setPublishState("idle");
     setScheduleAtInput("");
     appendQueueLog("已取消定时发送。");
     setNotice("定时发送已取消。");
-  };
+  }, [updateEntryStatus, appendQueueLog, setNotice]);
 
+  // ── Auto-execute scheduled entries ──
   useEffect(() => {
-    if (!draft.queued || !allowScheduledPublish || publishState !== "scheduled" || !scheduleAtInput) return;
+    if (!allowScheduledPublish) return;
     const timer = window.setInterval(() => {
+      if (!scheduleAtInput) return;
       if (Date.now() >= new Date(scheduleAtInput).getTime()) {
         window.clearInterval(timer);
-        void publishNow("scheduled");
+        // Find the scheduled entry and publish it
+        const scheduledEntry = queueEntries.find((e) => e.status === "scheduled");
+        if (scheduledEntry) {
+          void publishEntry(scheduledEntry.id, "scheduled");
+        }
       }
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [allowScheduledPublish, draft.queued, publishState, scheduleAtInput]);
+  }, [allowScheduledPublish, scheduleAtInput, queueEntries, publishEntry]);
+
+  // ── Sync selected entry state with publishState ──
+  const selectEntry = useCallback((entryId: string | null) => {
+    setSelectedEntryId(entryId);
+    if (entryId) {
+      const entry = queueEntries.find((e) => e.id === entryId);
+      if (entry) {
+        setPublishState(entry.status as PublishState);
+        setPublishOutput("");
+      }
+    }
+  }, [queueEntries]);
 
   return {
+    queueEntries,
+    selectedEntryId,
+    selectEntry,
     allowScheduledPublish,
     setAllowScheduledPublish,
     scheduleAtInput,
@@ -192,8 +281,9 @@ export function usePublishing(
     setPublishOutput,
     queueLogs,
     appendQueueLog,
-    publishNow,
-    schedulePublish,
-    cancelSchedule,
+    addToQueue,
+    publishEntry,
+    scheduleEntry,
+    cancelScheduleEntry,
   };
 }

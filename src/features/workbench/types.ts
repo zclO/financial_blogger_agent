@@ -8,6 +8,8 @@ export type Tab = "仪表盘" | "选题池" | "新闻源" | "流水线" | "内�
 export type PublishType = "post" | "article" | "video";
 export type VideoSourceType = "url" | "local";
 export type PublishState = "idle" | "scheduled" | "sending" | "sent" | "failed";
+export type QueueFilter = "all" | "unsent" | "sent";
+export type QueueEntryStatus = "pending" | "scheduled" | "sending" | "sent" | "failed";
 
 export type Topic = { id: number; title: string; source: string; verified: boolean; summary?: string; link?: string; processedContent?: string };
 

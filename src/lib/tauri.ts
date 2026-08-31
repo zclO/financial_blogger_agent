@@ -251,3 +251,33 @@ export function loadArticleLogStore(): Promise<ArticleLogStoreData> {
 export function saveArticleLogStore(store: ArticleLogStoreData): Promise<void> {
   return invoke<void>("save_article_log_store", { store });
 }
+
+// ── Publish Queue Store ──
+
+export interface QueueEntryData {
+  id: string;
+  title: string;
+  body: string;
+  finalBody: string;
+  publishType: string;
+  videoSourceType: string;
+  videoUrl: string;
+  videoFilePath: string;
+  symbols: string[];
+  status: string;
+  createdAt: string;
+  sentAt: string | null;
+  logs: string[];
+}
+
+export interface PublishQueueStoreData {
+  entries: QueueEntryData[];
+}
+
+export function loadPublishQueue(): Promise<PublishQueueStoreData> {
+  return invoke<PublishQueueStoreData>("load_publish_queue");
+}
+
+export function savePublishQueue(store: PublishQueueStoreData): Promise<void> {
+  return invoke<void>("save_publish_queue", { store });
+}

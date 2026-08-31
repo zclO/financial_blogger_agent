@@ -478,6 +478,176 @@ button.ghost {
   color: #475467;
 }
 
+/* ── Queue Panel ── */
+
+.queue-panel .queue-filters {
+  display: inline-flex;
+  gap: 0;
+  margin: 12px 0;
+  border: 1px solid #cfd4dc;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.queue-panel .queue-filters button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #334155;
+  font-weight: 600;
+  padding: 6px 14px;
+}
+
+.queue-panel .queue-filters button + button {
+  border-left: 1px solid #e4e7ec;
+}
+
+.queue-panel .queue-filters button:hover:enabled {
+  background: #edf2f7;
+}
+
+.queue-panel .queue-filters button.active {
+  background: #0f4c5c;
+  color: #ffffff;
+}
+
+.queue-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.queue-item {
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  background: #fcfcfd;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.queue-item:hover {
+  border-color: #b8e7ec;
+  background: #f7fbfc;
+}
+
+.queue-item.selected {
+  border-color: #59b9c3;
+  background: #e7f6f8;
+}
+
+.queue-item-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.queue-item-title {
+  font-weight: 600;
+  color: #111827;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-item-meta {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #667085;
+  align-items: center;
+}
+
+.queue-item-type {
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+  color: #344054;
+  background: #fff;
+}
+
+.queue-item-symbols {
+  color: #4aa3ad;
+  font-weight: 600;
+}
+
+.queue-status-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.queue-status-badge.pending {
+  background: #fef3cd;
+  color: #92600a;
+}
+
+.queue-status-badge.scheduled {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.queue-status-badge.sending {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.queue-status-badge.sent {
+  background: #d1fae5;
+  color: #166534;
+}
+
+.queue-status-badge.failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.queue-detail {
+  margin-top: 4px;
+}
+
+.queue-detail h3 {
+  margin: 8px 0 4px;
+  font-size: 15px;
+}
+
+.queue-panel .kv {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 6px;
+  padding: 4px 0;
+  align-items: baseline;
+}
+
+.queue-panel .kv .key {
+  color: #667085;
+  font-size: 13px;
+}
+
+.queue-panel .kv .value {
+  color: #111827;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.queue-panel .status {
+  color: #9a3412;
+  font-weight: 600;
+}
+
+.queue-panel .status.ok {
+  color: #166534;
+}
+
 details {
   margin: 10px 0;
 }

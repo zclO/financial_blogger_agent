@@ -81,13 +81,18 @@ export function App() {
   );
 
   const handleQueue = () => {
-    const error = workspace.queueDraft(symbols.allSymbols, publishing.appendQueueLog);
-    if (error) symbols.setComposerError(error);
-    else {
-      symbols.setComposerError("");
-      publishing.setPublishState("idle");
-      publishing.setPublishOutput("");
+    const error = workspace.validateDraftForQueue();
+    if (error) {
+      symbols.setComposerError(error);
+      return;
     }
+    publishing.addToQueue(workspace.draft, finalPublishBody, symbols.allSymbols);
+    workspace.setDraft((prev) => ({ ...prev, queued: true }));
+    symbols.setComposerError("");
+    publishing.setPublishState("idle");
+    publishing.setPublishOutput("");
+    setNotice("已进入发布队列。");
+    setTab("发布队列");
   };
 
   /** 从选题池触发工作流：重置状态后显示运行弹窗 */
@@ -129,7 +134,7 @@ export function App() {
             <section className="metrics">
               <MetricCard n={workspace.topics.length - workspace.verifiedCount} t="待核验选题" />
               <MetricCard n={workspace.verifiedCount} t="可生成草稿" />
-              <MetricCard n={workspace.draft.queued ? 1 : 0} t="待人工发布" />
+              <MetricCard n={publishing.queueEntries.filter((e) => e.status !== "sent").length} t="待人工发布" />
             </section>
             <TopicsPanel 
               topics={workspace.topics} 
@@ -221,10 +226,10 @@ export function App() {
 
         {tab === "发布队列" && (
           <QueuePanel
-            draft={workspace.draft}
+            queueEntries={publishing.queueEntries}
+            selectedEntryId={publishing.selectedEntryId}
+            onSelectEntry={(id) => publishing.selectEntry(id)}
             publishState={publishing.publishState}
-            allSymbols={symbols.allSymbols}
-            finalPublishBody={finalPublishBody}
             allowScheduledPublish={publishing.allowScheduledPublish}
             onToggleScheduled={(v) => {
               publishing.setAllowScheduledPublish(v);
@@ -232,9 +237,15 @@ export function App() {
             }}
             scheduleAtInput={publishing.scheduleAtInput}
             setScheduleAtInput={publishing.setScheduleAtInput}
-            schedulePublish={publishing.schedulePublish}
-            cancelSchedule={publishing.cancelSchedule}
-            publishNow={() => void publishing.publishNow("manual")}
+            schedulePublish={() => {
+              if (publishing.selectedEntryId) publishing.scheduleEntry(publishing.selectedEntryId);
+            }}
+            cancelSchedule={() => {
+              if (publishing.selectedEntryId) publishing.cancelScheduleEntry(publishing.selectedEntryId);
+            }}
+            publishNow={() => {
+              if (publishing.selectedEntryId) void publishing.publishEntry(publishing.selectedEntryId, "manual");
+            }}
             publishOutput={publishing.publishOutput}
             queueLogs={publishing.queueLogs}
           />
