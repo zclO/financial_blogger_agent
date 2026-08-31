@@ -37,7 +37,11 @@ pub fn save_proxy_config(app: &AppHandle, config: &BinanceSquareProxyConfig) -> 
 }
 
 pub fn build_http_client(app: &AppHandle) -> Result<reqwest::Client, String> {
-    let mut builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(15));
+    build_http_client_with_timeout(app, std::time::Duration::from_secs(15))
+}
+
+pub fn build_http_client_with_timeout(app: &AppHandle, timeout: std::time::Duration) -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder().timeout(timeout);
     let proxy = load_proxy_config(app);
     if proxy.enabled {
         if let Some(proxy_url) = proxy.proxy_url {

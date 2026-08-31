@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
+use std::error::Error as StdError;
 use tauri::AppHandle;
 
-use crate::http::build_http_client;
+use crate::http::build_http_client_with_timeout;
 
 // ── Types ──
 
@@ -76,7 +77,8 @@ struct RawUsage {
 
 #[tauri::command]
 pub async fn call_llm(app: AppHandle, request: LlmRequest) -> Result<LlmResponse, String> {
-    let client = build_http_client(&app)?;
+    // LLM generation can take 30-120s for large content; use 120s timeout
+    let client = build_http_client_with_timeout(&app, std::time::Duration::from_secs(120))?;
 
     let body = ChatRequest {
         model: &request.model,
@@ -101,21 +103,44 @@ pub async fn call_llm(app: AppHandle, request: LlmRequest) -> Result<LlmResponse
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("LLM API 请求失败: {}", e))?;
+        .map_err(|e| {
+            // Provide detailed diagnostic info
+            let mut msg = String::new();
+            if e.is_timeout() {
+                msg.push_str("请求超时（120 秒），请检查网络连通性或模型服务状态。");
+            } else if e.is_connect() {
+                msg.push_str("无法建立连接，请检查：");
+                msg.push_str("\n  1. 目标地址是否可达（DNS / 防火墙 / 代理）");
+                msg.push_str(&format!("\n  目标: {}", request.api_endpoint));
+            } else if e.is_redirect() {
+                msg.push_str("重定向次数过多。");
+            } else if e.is_request() {
+                msg.push_str("请求构建失败，请检查 API 端点格式。");
+            } else {
+                msg.push_str("请求发送失败。");
+            }
+            // Append the full error chain
+            msg.push_str(&format!("\n原始错误: {}", e));
+            let mut source = StdError::source(&e);
+            while let Some(cause) = source {
+                msg.push_str(&format!("\n  → {}", cause));
+                source = StdError::source(cause);
+            }
+            msg
+        })?;
 
     let status = resp.status();
+    let raw_body = resp.text().await.unwrap_or_default();
+
     if !status.is_success() {
-        let error_body = resp.text().await.unwrap_or_default();
         return Err(format!(
             "LLM API 返回错误 (HTTP {}): {}",
-            status, error_body
+            status, raw_body
         ));
     }
 
-    let chat_resp: ChatResponse = resp
-        .json()
-        .await
-        .map_err(|e| format!("解析 LLM 响应失败: {}", e))?;
+    let chat_resp: ChatResponse = serde_json::from_str(&raw_body)
+        .map_err(|e| format!("解析 LLM 响应失败: {}\n原始响应: {}", e, raw_body))?;
 
     let content = chat_resp
         .choices
@@ -123,6 +148,23 @@ pub async fn call_llm(app: AppHandle, request: LlmRequest) -> Result<LlmResponse
         .and_then(|c| c.message.content.as_deref())
         .unwrap_or("")
         .to_string();
+
+    if content.is_empty() {
+        let choices_count = chat_resp.choices.len();
+        let has_null_content = chat_resp.choices.first()
+            .map(|c| c.message.content.is_none())
+            .unwrap_or(false);
+        let mut detail = format!("LLM API 返回内容为空（choices 数量: {}）", choices_count);
+        if choices_count == 0 {
+            detail.push_str("\nAPI 未返回任何候选结果，请检查模型名称和提示词。");
+        } else if has_null_content {
+            detail.push_str("\n模型返回了 null 内容，可能原因：");
+            detail.push_str("\n  - 提示词触发了内容安全过滤");
+            detail.push_str("\n  - 模型不支持的请求格式");
+        }
+        detail.push_str(&format!("\n原始响应: {}", raw_body));
+        return Err(detail);
+    }
 
     let model = request.model.clone();
     let usage = chat_resp.usage.map(|u| LlmUsage {
