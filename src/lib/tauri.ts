@@ -183,6 +183,7 @@ export interface StoredTopic {
   verified: boolean;
   summary?: string;
   link?: string;
+  processedContent?: string;
 }
 
 export interface TopicStoreData {

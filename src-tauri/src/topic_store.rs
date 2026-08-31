@@ -15,6 +15,8 @@ pub struct StoredTopic {
     pub summary: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processed_content: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]

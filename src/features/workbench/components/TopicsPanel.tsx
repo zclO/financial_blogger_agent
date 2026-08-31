@@ -69,6 +69,11 @@ export function TopicsPanel({
             <b>{x.title}</b>
             <small>
               {x.source} · {x.verified ? "已核验" : "待核验"}
+              {x.processedContent && (
+                <span style={{ color: "#059669", marginLeft: "0.5rem" }} title="已通过流水线加工">
+                  ✨ 已加工
+                </span>
+              )}
             </small>
           </div>
           <div style={{ display: "flex", gap: "0.25rem" }}>

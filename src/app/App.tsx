@@ -26,7 +26,7 @@ export function App() {
   const workspace = useWorkspace(setNotice, setTab);
   const square = useSquare();
   const symbols = useSymbolSearch(workspace.draft);
-  const pipeline = usePipeline();
+  const pipeline = usePipeline(workspace.updateTopicProcessedContent);
 
   // Auto-execute default pipeline when new topics are imported
   const handleNewTopics = useCallback(

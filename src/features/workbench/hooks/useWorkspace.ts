@@ -59,8 +59,10 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
   const openComposer = (topic?: Topic) => {
     if (topic) {
       const bodyParts: string[] = [topic.title, ""];
-      if (topic.summary) {
-        bodyParts.push(topic.summary);
+      // Prefer processed content over original summary
+      const content = topic.processedContent || topic.summary;
+      if (content) {
+        bodyParts.push(content);
       } else {
         bodyParts.push(`来源：${topic.source}`);
       }
@@ -119,6 +121,13 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
     setTab("选题池");
   };
 
+  /** Update a topic's processed content (called after pipeline execution) */
+  const updateTopicProcessedContent = (id: number, processedContent: string) => {
+    setTopics((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, processedContent } : t)),
+    );
+  };
+
   const validateDraftForQueue = (): string | null => {
     if (!draft.body.includes("不构成投资建议")) return "草稿必须保留\u201c信息整理，不构成投资建议\u201d。";
     if (draft.publishType === "article" && !draft.title.trim()) return "文章类型必须填写标题。";
@@ -168,6 +177,7 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
     openComposer,
     importArticlesToTopics,
     convertArticleToTopic,
+    updateTopicProcessedContent,
     validateDraftForQueue,
     queueDraft,
     chooseLocalVideoFile,

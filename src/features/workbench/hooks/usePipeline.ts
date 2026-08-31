@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   callLlm,
@@ -209,12 +209,16 @@ async function executePipeline(
 
 // ── Hook ──
 
-export function usePipeline() {
+export function usePipeline(onProcessComplete?: (topicId: number, content: string) => void) {
   // Saved pipelines
   const [savedPipelines, setSavedPipelines] = useState<SavedPipeline[]>([]);
   const [defaultPipelineId, setDefaultPipelineId] = useState<string | null>(null);
   const [editingPipelineId, setEditingPipelineId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+
+  // Callback ref to avoid stale closures
+  const onCompleteRef = useRef(onProcessComplete);
+  onCompleteRef.current = onProcessComplete;
 
   // Canvas state (editing buffer)
   const [nodes, setNodes] = useState<PipelineNode[]>([]);
@@ -469,6 +473,10 @@ export function usePipeline() {
     try {
       const res = await executePipeline(nodes, edges, topic, appendLog);
       setResults(res);
+      // Persist processed content back to the topic
+      if (res.length > 0 && res[0].processedContent) {
+        onCompleteRef.current?.(topic.id, res[0].processedContent);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       appendLog(`\u274C \u5DE5\u4F5C\u6D41\u6267\u884C\u51FA\u9519: ${msg}`);
@@ -509,6 +517,10 @@ export function usePipeline() {
     try {
       const res = await executePipeline(pl.nodes, pl.edges, topic, appendLog);
       setResults(res);
+      // Persist processed content back to the topic
+      if (res.length > 0 && res[0].processedContent) {
+        onCompleteRef.current?.(topic.id, res[0].processedContent);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       appendLog(`\u274C \u81EA\u52A8\u6267\u884C\u51FA\u9519: ${msg}`);
