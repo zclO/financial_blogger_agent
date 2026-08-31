@@ -75,12 +75,12 @@ export function App() {
               <MetricCard n={workspace.verifiedCount} t="可生成草稿" />
               <MetricCard n={workspace.draft.queued ? 1 : 0} t="待人工发布" />
             </section>
-            <TopicsPanel topics={workspace.topics} verify={workspace.verifyTopic} openComposer={workspace.openComposer} />
+            <TopicsPanel topics={workspace.topics} verify={workspace.verifyTopic} verifyMany={workspace.verifyMany} openComposer={workspace.openComposer} />
           </>
         )}
 
         {tab === "选题池" && (
-          <TopicsPanel topics={workspace.topics} verify={workspace.verifyTopic} openComposer={workspace.openComposer} />
+          <TopicsPanel topics={workspace.topics} verify={workspace.verifyTopic} verifyMany={workspace.verifyMany} openComposer={workspace.openComposer} />
         )}
 
         {tab === "新闻源" && (

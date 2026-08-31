@@ -23,6 +23,11 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
     setTopics((prev) => prev.map((x) => (x.id === id ? { ...x, verified: true } : x)));
   };
 
+  const verifyMany = (ids: number[]) => {
+    const idSet = new Set(ids);
+    setTopics((prev) => prev.map((x) => (idSet.has(x.id) ? { ...x, verified: true } : x)));
+  };
+
   const openComposer = () => setTab("内容工坊");
 
   /** 将抓取到的文章自动导入选题池（去重），返回实际新增条数 */
@@ -102,6 +107,7 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
     setDraft,
     verifiedCount,
     verifyTopic,
+    verifyMany,
     openComposer,
     importArticlesToTopics,
     convertArticleToTopic,
