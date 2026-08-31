@@ -111,3 +111,11 @@ export type FlowEdge = {
   source: string;
   target: string;
 };
+
+export type SavedPipeline = {
+  id: string;
+  name: string;
+  nodes: PipelineNode[];
+  edges: FlowEdge[];
+  isDefault: boolean;
+};

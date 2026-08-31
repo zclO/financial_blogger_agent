@@ -19,13 +19,13 @@ import type {
   PipelineNodeKind,
   ProcessedArticle,
   FlowEdge,
+  SavedPipeline,
   Topic,
 } from "../types";
 import { PipelineNodeComponent } from "./PipelineNode";
 
 const nodeTypes = { pipelineNode: PipelineNodeComponent };
 
-// ── Default edge options for smooth curves ──
 const defaultEdgeOptions = {
   type: "smoothstep" as const,
   style: { stroke: "#b1b1b1", strokeWidth: 1.5 },
@@ -34,6 +34,11 @@ const defaultEdgeOptions = {
 // ── Props ──
 
 export function PipelinePanel({
+  savedPipelines,
+  defaultPipelineId,
+  editingPipelineId,
+  editingPipeline,
+  dirty,
   nodes,
   edges,
   selectedNodeId,
@@ -45,12 +50,24 @@ export function PipelinePanel({
   onUpdateLlmConfig,
   onAddEdge,
   onRemoveEdge,
+  onCreatePipeline,
+  onLoadPipeline,
+  onSavePipeline,
+  onRenamePipeline,
+  onDeletePipeline,
+  onSetDefaultPipeline,
+  onClearDefaultPipeline,
   running,
   results,
   runLog,
   currentArticle,
   newsSources,
 }: {
+  savedPipelines: SavedPipeline[];
+  defaultPipelineId: string | null;
+  editingPipelineId: string | null;
+  editingPipeline: SavedPipeline | null;
+  dirty: boolean;
   nodes: PipelineNode[];
   edges: FlowEdge[];
   selectedNodeId: string | null;
@@ -62,18 +79,315 @@ export function PipelinePanel({
   onUpdateLlmConfig: (nodeId: string, config: Partial<LlmNodeConfig>) => void;
   onAddEdge: (source: string, target: string) => void;
   onRemoveEdge: (edgeId: string) => void;
+  onCreatePipeline: (name: string) => string;
+  onLoadPipeline: (id: string) => void;
+  onSavePipeline: () => void;
+  onRenamePipeline: (id: string, name: string) => void;
+  onDeletePipeline: (id: string) => void;
+  onSetDefaultPipeline: (id: string) => void;
+  onClearDefaultPipeline: () => void;
   running: boolean;
   results: ProcessedArticle[];
   runLog: string[];
   currentArticle: Topic | null;
   newsSources: { id: string; name: string }[];
 }) {
+  // If editing a pipeline, show the editor; otherwise show the list
+  if (editingPipelineId && editingPipeline) {
+    return (
+      <PipelineEditor
+        editingPipeline={editingPipeline}
+        dirty={dirty}
+        nodes={nodes}
+        edges={edges}
+        selectedNodeId={selectedNodeId}
+        selectedNode={selectedNode}
+        onSelectNode={onSelectNode}
+        onAddNode={onAddNode}
+        onRemoveNode={onRemoveNode}
+        onUpdateNodePosition={onUpdateNodePosition}
+        onUpdateLlmConfig={onUpdateLlmConfig}
+        onAddEdge={onAddEdge}
+        onRemoveEdge={onRemoveEdge}
+        onSavePipeline={onSavePipeline}
+        onLoadPipeline={onLoadPipeline}
+        running={running}
+        results={results}
+        runLog={runLog}
+        currentArticle={currentArticle}
+      />
+    );
+  }
+
+  return (
+    <PipelineList
+      savedPipelines={savedPipelines}
+      defaultPipelineId={defaultPipelineId}
+      onCreatePipeline={onCreatePipeline}
+      onLoadPipeline={onLoadPipeline}
+      onRenamePipeline={onRenamePipeline}
+      onDeletePipeline={onDeletePipeline}
+      onSetDefaultPipeline={onSetDefaultPipeline}
+      onClearDefaultPipeline={onClearDefaultPipeline}
+    />
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// Pipeline List View
+// ══════════════════════════════════════════════════════════════
+
+function PipelineList({
+  savedPipelines,
+  defaultPipelineId,
+  onCreatePipeline,
+  onLoadPipeline,
+  onRenamePipeline,
+  onDeletePipeline,
+  onSetDefaultPipeline,
+  onClearDefaultPipeline,
+}: {
+  savedPipelines: SavedPipeline[];
+  defaultPipelineId: string | null;
+  onCreatePipeline: (name: string) => string;
+  onLoadPipeline: (id: string) => void;
+  onRenamePipeline: (id: string, name: string) => void;
+  onDeletePipeline: (id: string) => void;
+  onSetDefaultPipeline: (id: string) => void;
+  onClearDefaultPipeline: () => void;
+}) {
+  const [newName, setNewName] = useState("");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  const handleCreate = () => {
+    const name = newName.trim();
+    if (!name) return;
+    onCreatePipeline(name);
+    setNewName("");
+  };
+
+  const startRename = (id: string, currentName: string) => {
+    setRenamingId(id);
+    setRenameValue(currentName);
+  };
+
+  const confirmRename = () => {
+    if (renamingId && renameValue.trim()) {
+      onRenamePipeline(renamingId, renameValue.trim());
+    }
+    setRenamingId(null);
+    setRenameValue("");
+  };
+
+  return (
+    <section style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 120px)" }}>
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: "0.75rem",
+        padding: "0.5rem 0", borderBottom: "1px solid #e5e7eb", marginBottom: "0.5rem",
+      }}>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>流水线管理</h2>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 12, color: "#888" }}>
+          共 {savedPipelines.length} 条流水线
+        </span>
+      </div>
+
+      {/* Create new pipeline */}
+      <div style={{
+        display: "flex", gap: "0.5rem", padding: "0.75rem 0",
+        borderBottom: "1px solid #f0f0f0",
+      }}>
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+          placeholder="新建流水线名称…"
+          style={{
+            flex: 1, padding: "8px 12px", border: "1px solid #ddd",
+            borderRadius: 8, fontSize: 13, outline: "none",
+          }}
+        />
+        <button
+          onClick={handleCreate}
+          disabled={!newName.trim()}
+          style={{
+            padding: "8px 16px", borderRadius: 8, border: "none",
+            background: newName.trim() ? "#7c3aed" : "#e5e7eb",
+            color: newName.trim() ? "#fff" : "#aaa",
+            fontSize: 13, fontWeight: 500, cursor: newName.trim() ? "pointer" : "default",
+          }}
+        >
+          + 新建
+        </button>
+      </div>
+
+      {/* Pipeline list */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "0.5rem 0" }}>
+        {savedPipelines.length === 0 && (
+          <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#aaa" }}>
+            <div style={{ fontSize: 40, marginBottom: "0.75rem" }}>📋</div>
+            <p style={{ fontSize: 14 }}>还没有流水线</p>
+            <p style={{ fontSize: 12 }}>在上方输入名称创建第一条流水线</p>
+          </div>
+        )}
+        {savedPipelines.map((pl) => {
+          const isDefault = pl.id === defaultPipelineId;
+          const isRenaming = renamingId === pl.id;
+          return (
+            <div
+              key={pl.id}
+              style={{
+                display: "flex", alignItems: "center", gap: "0.5rem",
+                padding: "0.65rem 0.75rem", margin: "0 0 0.35rem",
+                borderRadius: 10, border: "1px solid #e5e7eb",
+                background: "#fff", transition: "border-color 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#c4b5fd"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; }}
+            >
+              {/* Icon */}
+              <span style={{ fontSize: 20, flexShrink: 0 }}>
+                {isDefault ? "\u2B50" : "\u{1F4CB}"}
+              </span>
+
+              {/* Name / rename input */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {isRenaming ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") confirmRename();
+                      if (e.key === "Escape") { setRenamingId(null); setRenameValue(""); }
+                    }}
+                    onBlur={confirmRename}
+                    style={{
+                      width: "100%", padding: "4px 8px", border: "1px solid #7c3aed",
+                      borderRadius: 6, fontSize: 13, outline: "none",
+                    }}
+                  />
+                ) : (
+                  <div style={{ fontWeight: 600, fontSize: 14, color: "#111" }}>
+                    {pl.name}
+                    {isDefault && (
+                      <span style={{
+                        marginLeft: 8, fontSize: 11, fontWeight: 500,
+                        color: "#7c3aed", background: "#f3e8ff",
+                        padding: "2px 6px", borderRadius: 4,
+                      }}>
+                        默认
+                      </span>
+                    )}
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>
+                  {pl.nodes.length} 个节点 · {pl.edges.length} 条连线
+                </div>
+              </div>
+
+              {/* Actions */}
+              {!isRenaming && (
+                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                  <SmallBtn
+                    title="编辑"
+                    onClick={() => onLoadPipeline(pl.id)}
+                    style={{ color: "#7c3aed", borderColor: "#ddd6fe" }}
+                  >
+                    ✏️
+                  </SmallBtn>
+                  <SmallBtn
+                    title={isDefault ? "取消默认" : "设为默认"}
+                    onClick={() => isDefault ? onClearDefaultPipeline() : onSetDefaultPipeline(pl.id)}
+                    style={{ color: isDefault ? "#f59e0b" : "#888", borderColor: "#e5e7eb" }}
+                  >
+                    {isDefault ? "★" : "☆"}
+                  </SmallBtn>
+                  <SmallBtn
+                    title="重命名"
+                    onClick={() => startRename(pl.id, pl.name)}
+                    style={{ color: "#888", borderColor: "#e5e7eb" }}
+                  >
+                    ✎
+                  </SmallBtn>
+                  <SmallBtn
+                    title="删除"
+                    onClick={() => { if (confirm(`确定删除流水线「${pl.name}」？`)) onDeletePipeline(pl.id); }}
+                    style={{ color: "#ef4444", borderColor: "#fecaca" }}
+                  >
+                    🗑
+                  </SmallBtn>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Help text */}
+      <div style={{
+        padding: "0.75rem", borderTop: "1px solid #e5e7eb",
+        fontSize: 12, color: "#aaa", lineHeight: 1.6,
+      }}>
+        <b>默认流水线</b>会在新闻导入选题池时自动执行加工。
+        点击 ☆ 将流水线设为默认。
+      </div>
+    </section>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// Pipeline Editor View
+// ══════════════════════════════════════════════════════════════
+
+function PipelineEditor({
+  editingPipeline,
+  dirty,
+  nodes,
+  edges,
+  selectedNodeId,
+  selectedNode,
+  onSelectNode,
+  onAddNode,
+  onRemoveNode,
+  onUpdateNodePosition,
+  onUpdateLlmConfig,
+  onAddEdge,
+  onRemoveEdge,
+  onSavePipeline,
+  onLoadPipeline,
+  running,
+  results,
+  runLog,
+  currentArticle,
+}: {
+  editingPipeline: SavedPipeline;
+  dirty: boolean;
+  nodes: PipelineNode[];
+  edges: FlowEdge[];
+  selectedNodeId: string | null;
+  selectedNode: PipelineNode | null;
+  onSelectNode: (id: string | null) => void;
+  onAddNode: (kind: PipelineNodeKind, position: { x: number; y: number }) => string;
+  onRemoveNode: (id: string) => void;
+  onUpdateNodePosition: (id: string, pos: { x: number; y: number }) => void;
+  onUpdateLlmConfig: (nodeId: string, config: Partial<LlmNodeConfig>) => void;
+  onAddEdge: (source: string, target: string) => void;
+  onRemoveEdge: (edgeId: string) => void;
+  onSavePipeline: () => void;
+  onLoadPipeline: (id: string) => void;
+  running: boolean;
+  results: ProcessedArticle[];
+  runLog: string[];
+  currentArticle: Topic | null;
+}) {
   type AppNode = Node<PipelineNode>;
 
   // ── Context menu state ──
   const [ctxMenu, setCtxMenu] = useState<{
-    x: number; y: number;
-    nodeId: string | null;
+    x: number; y: number; nodeId: string | null;
   } | null>(null);
   const rfInstance = useRef<ReactFlowInstance<AppNode, Edge> | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -160,7 +474,6 @@ export function PipelinePanel({
 
   const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
 
-  // Close context menu on outside click
   useEffect(() => {
     if (!ctxMenu) return;
     const handler = () => setCtxMenu(null);
@@ -189,13 +502,39 @@ export function PipelinePanel({
         display: "flex", alignItems: "center", gap: "0.75rem",
         padding: "0.5rem 0", borderBottom: "1px solid #e5e7eb", marginBottom: "0.5rem",
       }}>
-        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>工作流编排</h2>
+        <button
+          onClick={() => onLoadPipeline(editingPipeline.id)}
+          style={{
+            background: "none", border: "1px solid #ddd", borderRadius: 6,
+            padding: "4px 10px", cursor: "pointer", fontSize: 13, color: "#555",
+          }}
+          title="返回流水线列表"
+        >
+          ← 列表
+        </button>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+          {editingPipeline.name}
+        </h2>
+        {dirty && (
+          <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 500 }}>● 未保存</span>
+        )}
         <span style={{ flex: 1 }} />
         {running && (
-          <span style={{ fontSize: 12, color: "#7c3aed", fontWeight: 500 }}>
-            ⏳ 执行中…
-          </span>
+          <span style={{ fontSize: 12, color: "#7c3aed", fontWeight: 500 }}>⏳ 执行中…</span>
         )}
+        <button
+          onClick={onSavePipeline}
+          disabled={!dirty}
+          style={{
+            padding: "6px 16px", borderRadius: 8, border: "none",
+            background: dirty ? "#7c3aed" : "#e5e7eb",
+            color: dirty ? "#fff" : "#aaa",
+            fontSize: 13, fontWeight: 500,
+            cursor: dirty ? "pointer" : "default",
+          }}
+        >
+          💾 保存
+        </button>
       </div>
 
       <div style={{ display: "flex", gap: 0, flex: 1, minHeight: 0 }}>
@@ -216,7 +555,7 @@ export function PipelinePanel({
             color="#7c3aed" onClick={() => handleAddNode("llm")}
           />
           <div style={{ marginTop: "1rem", fontSize: 11, color: "#aaa", lineHeight: 1.5 }}>
-            点击添加节点到画布。拖动端口创建连线。
+            点击添加节点到画布。拖动端口创建连线。右键可快速添加。
           </div>
         </div>
 
@@ -256,12 +595,10 @@ export function PipelinePanel({
               onClose={closeCtxMenu}
             >
               {ctxMenu.nodeId ? (
-                <>
-                  <CtxItem
-                    icon="🗑️" label="删除节点" danger
-                    onClick={() => { onRemoveNode(ctxMenu.nodeId!); closeCtxMenu(); }}
-                  />
-                </>
+                <CtxItem
+                  icon="🗑️" label="删除节点" danger
+                  onClick={() => { onRemoveNode(ctxMenu.nodeId!); closeCtxMenu(); }}
+                />
               ) : (
                 <>
                   <CtxItem icon="📰" label="添加信息源"
@@ -413,7 +750,35 @@ export function PipelinePanel({
   );
 }
 
-// ── Sub-components ──
+// ══════════════════════════════════════════════════════════════
+// Shared sub-components
+// ══════════════════════════════════════════════════════════════
+
+function SmallBtn({
+  children, title, onClick, style,
+}: {
+  children: React.ReactNode; title: string; onClick: () => void;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        width: 30, height: 30, borderRadius: 6,
+        border: "1px solid #e5e7eb", background: "#fff",
+        cursor: "pointer", display: "flex",
+        alignItems: "center", justifyContent: "center",
+        fontSize: 14, padding: 0, transition: "background 0.1s",
+        ...style,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = "#f5f5f5"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}
+    >
+      {children}
+    </button>
+  );
+}
 
 function ContextMenu({
   x, y, anchor, onClose, children,
@@ -423,7 +788,6 @@ function ContextMenu({
   onClose: () => void;
   children: React.ReactNode;
 }) {
-  // Convert viewport coords to container-relative
   const rect = anchor?.getBoundingClientRect();
   const left = rect ? x - rect.left : x;
   const top = rect ? y - rect.top : y;

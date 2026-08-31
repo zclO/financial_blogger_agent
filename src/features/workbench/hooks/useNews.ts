@@ -1,19 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { fetchNews, getDefaultNewsSources, type NewsFetchResult, type NewsSource } from "../../../lib/tauri";
 import { DEFAULT_NEWS_SOURCES } from "../constants";
 import type { Topic } from "../types";
 
-export function useNews(setTopics: (fn: (prev: Topic[]) => Topic[]) => void, setNotice: (msg: string) => void) {
+export function useNews(
+  setTopics: (fn: (prev: Topic[]) => Topic[]) => void,
+  setNotice: (msg: string) => void,
+  onNewTopics?: (topics: Topic[]) => void,
+) {
   const [newsSources, setNewsSources] = useState<NewsSource[]>(DEFAULT_NEWS_SOURCES);
   const [newsResults, setNewsResults] = useState<NewsFetchResult[]>([]);
   const [newsFetching, setNewsFetching] = useState(false);
+  const onNewTopicsRef = useRef(onNewTopics);
+  onNewTopicsRef.current = onNewTopics;
 
   const importArticlesToTopics = (articles: { title: string; sourceName: string; summary?: string; link?: string }[]): number => {
     let addedCount = 0;
+    const newTopics: Topic[] = [];
     setTopics((prev) => {
       const existingTitles = new Set(prev.map((t) => t.title));
-      const newTopics: Topic[] = [];
       for (const article of articles) {
         if (!article.title || existingTitles.has(article.title)) continue;
         existingTitles.add(article.title);
@@ -29,6 +35,10 @@ export function useNews(setTopics: (fn: (prev: Topic[]) => Topic[]) => void, set
       addedCount = newTopics.length;
       return newTopics.length > 0 ? [...newTopics, ...prev] : prev;
     });
+    // Notify callback with newly added topics
+    if (newTopics.length > 0) {
+      setTimeout(() => onNewTopicsRef.current?.(newTopics), 0);
+    }
     return addedCount;
   };
 

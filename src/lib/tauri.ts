@@ -127,3 +127,49 @@ export interface LlmResponse {
 export function callLlm(request: LlmRequest): Promise<LlmResponse> {
   return invoke<LlmResponse>("call_llm", { request });
 }
+
+// ── Pipeline Store ──
+
+export interface StoredPipelineNode {
+  id: string;
+  kind: string;
+  name: string;
+  position: { x: number; y: number };
+  sourceConfig?: { sourceIds: string[] };
+  llmConfig?: {
+    apiEndpoint: string;
+    apiKey: string;
+    model: string;
+    systemPrompt: string;
+    userPromptTemplate: string;
+    temperature: number;
+    maxTokens: number;
+  };
+}
+
+export interface StoredFlowEdge {
+  id: string;
+  source: string;
+  target: string;
+}
+
+export interface StoredPipeline {
+  id: string;
+  name: string;
+  nodes: StoredPipelineNode[];
+  edges: StoredFlowEdge[];
+  isDefault: boolean;
+}
+
+export interface PipelineStore {
+  pipelines: StoredPipeline[];
+  defaultPipelineId: string | null;
+}
+
+export function loadPipelines(): Promise<PipelineStore> {
+  return invoke<PipelineStore>("load_pipelines");
+}
+
+export function savePipelines(store: PipelineStore): Promise<void> {
+  return invoke<void>("save_pipelines", { store });
+}

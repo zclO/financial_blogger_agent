@@ -2,6 +2,7 @@ mod binance;
 mod http;
 mod news;
 mod pipeline;
+mod pipeline_store;
 mod workspace;
 
 pub fn run() {
@@ -27,6 +28,9 @@ pub fn run() {
             news::fetch_news,
             // pipeline
             pipeline::call_llm,
+            // pipeline store
+            pipeline_store::load_pipelines,
+            pipeline_store::save_pipelines,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Financial Blogger Agent");

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { ComposerPanel } from "../features/workbench/components/ComposerPanel";
 import { MetricCard } from "../features/workbench/components/MetricCard";
@@ -26,6 +26,18 @@ export function App() {
   const workspace = useWorkspace(setNotice, setTab);
   const square = useSquare();
   const symbols = useSymbolSearch(workspace.draft);
+  const pipeline = usePipeline();
+
+  // Auto-execute default pipeline when new topics are imported
+  const handleNewTopics = useCallback(
+    (topics: Topic[]) => {
+      if (!pipeline.defaultPipelineId) return;
+      for (const topic of topics) {
+        void pipeline.autoProcessTopic(topic);
+      }
+    },
+    [pipeline.defaultPipelineId, pipeline.autoProcessTopic],
+  );
 
   // ── Derived values (must be before usePublishing which depends on finalPublishBody) ──
   const finalPublishBody = useMemo(
@@ -33,8 +45,7 @@ export function App() {
     [workspace.draft.body, symbols.allSymbols],
   );
 
-  const news = useNews(workspace.setTopics, setNotice);
-  const pipeline = usePipeline();
+  const news = useNews(workspace.setTopics, setNotice, handleNewTopics);
   const publishing = usePublishing(
     workspace.draft,
     workspace.setDraft,
@@ -105,6 +116,11 @@ export function App() {
 
         {tab === "流水线" && (
           <PipelinePanel
+            savedPipelines={pipeline.savedPipelines}
+            defaultPipelineId={pipeline.defaultPipelineId}
+            editingPipelineId={pipeline.editingPipelineId}
+            editingPipeline={pipeline.editingPipeline}
+            dirty={pipeline.dirty}
             nodes={pipeline.nodes}
             edges={pipeline.edges}
             selectedNodeId={pipeline.selectedNodeId}
@@ -116,6 +132,13 @@ export function App() {
             onUpdateLlmConfig={pipeline.updateLlmConfig}
             onAddEdge={pipeline.addEdge}
             onRemoveEdge={pipeline.removeEdge}
+            onCreatePipeline={pipeline.createPipeline}
+            onLoadPipeline={pipeline.loadPipeline}
+            onSavePipeline={pipeline.saveCurrentPipeline}
+            onRenamePipeline={pipeline.renamePipeline}
+            onDeletePipeline={pipeline.deletePipeline}
+            onSetDefaultPipeline={pipeline.setDefaultPipeline}
+            onClearDefaultPipeline={pipeline.clearDefaultPipeline}
             running={pipeline.running}
             results={pipeline.results}
             runLog={pipeline.runLog}
