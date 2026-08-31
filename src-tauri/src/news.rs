@@ -41,14 +41,13 @@ fn default_news_sources() -> Vec<NewsSourceDto> {
         // Crypto Media
         NewsSourceDto { id: "coindesk".into(), name: "CoinDesk".into(), category: "加密货币".into(), url: "https://www.coindesk.com/arc/outboundfeeds/rss/".into() },
         NewsSourceDto { id: "cointelegraph".into(), name: "Cointelegraph".into(), category: "加密货币".into(), url: "https://cointelegraph.com/rss".into() },
-        NewsSourceDto { id: "theblock".into(), name: "The Block".into(), category: "加密货币".into(), url: "https://www.theblock.co/rss".into() },
+        NewsSourceDto { id: "cryptoslate".into(), name: "CryptoSlate".into(), category: "加密货币".into(), url: "https://cryptoslate.com/feed/".into() },
         NewsSourceDto { id: "decrypt".into(), name: "Decrypt".into(), category: "加密货币".into(), url: "https://decrypt.co/feed".into() },
+        NewsSourceDto { id: "bitcoin-magazine".into(), name: "Bitcoin Magazine".into(), category: "加密货币".into(), url: "https://bitcoinmagazine.com/.rss/full/".into() },
         // Government & Regulatory
         NewsSourceDto { id: "sec".into(), name: "SEC".into(), category: "政府监管".into(), url: "https://www.sec.gov/news/pressreleases.rss".into() },
-        NewsSourceDto { id: "cftc".into(), name: "CFTC".into(), category: "政府监管".into(), url: "https://www.cftc.gov/rss/rss_news.xml".into() },
         NewsSourceDto { id: "fed".into(), name: "Federal Reserve".into(), category: "政府监管".into(), url: "https://www.federalreserve.gov/feeds/press_all.xml".into() },
-        NewsSourceDto { id: "treasury".into(), name: "U.S. Treasury".into(), category: "政府监管".into(), url: "https://home.treasury.gov/system/files/126/press-releases.rss".into() },
-        NewsSourceDto { id: "federal-register".into(), name: "Federal Register".into(), category: "政府监管".into(), url: "https://www.federalregister.gov/api/v1/documents.json?conditions%5Bterm%5D=crypto&per_page=20&order=newest".into() },
+        NewsSourceDto { id: "federal-register".into(), name: "Federal Register (Crypto)".into(), category: "政府监管".into(), url: "https://www.federalregister.gov/api/v1/documents.rss?conditions[term]=crypto&per_page=20".into() },
     ]
 }
 
@@ -120,31 +119,39 @@ pub async fn fetch_news(
         let result = async {
             let resp = client
                 .get(&source.url)
-                .header("User-Agent", "FinancialBloggerAgent/0.1 (RSS Reader)")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                .header("Accept", "application/rss+xml, application/xml, text/xml, */*")
                 .send()
                 .await
                 .map_err(|e| format!("网络请求失败: {}", e))?;
 
-            if !resp.status().is_success() {
-                return Err(format!("HTTP 状态码: {}", resp.status()));
-            }
-
+            let status = resp.status();
             let bytes = resp
                 .bytes()
                 .await
                 .map_err(|e| format!("读取响应失败: {}", e))?;
 
-            let feed = feed_rs::parser::parse(std::io::Cursor::new(&bytes))
-                .map_err(|e| format!("RSS 解析失败: {}", e))?;
-
-            let articles: Vec<NewsArticle> = feed
-                .entries
-                .iter()
-                .enumerate()
-                .map(|(i, e)| map_entry_to_article(e, &source, i))
-                .collect();
-
-            Ok(articles)
+            // Some servers (e.g. Federal Register) return 403 but still include
+            // valid RSS content in the body. Try parsing first; only report HTTP
+            // status if parsing also fails.
+            match feed_rs::parser::parse(std::io::Cursor::new(&bytes)) {
+                Ok(feed) => {
+                    let articles: Vec<NewsArticle> = feed
+                        .entries
+                        .iter()
+                        .enumerate()
+                        .map(|(i, e)| map_entry_to_article(e, &source, i))
+                        .collect();
+                    Ok(articles)
+                }
+                Err(parse_err) => {
+                    if !status.is_success() {
+                        Err(format!("HTTP 状态码: {}", status))
+                    } else {
+                        Err(format!("RSS 解析失败: {}", parse_err))
+                    }
+                }
+            }
         }
         .await;
 

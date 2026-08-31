@@ -14,12 +14,11 @@ export const DEFAULT_NEWS_SOURCES: NewsSource[] = [
   // Crypto Media
   { id: "coindesk", name: "CoinDesk", category: "加密货币", url: "https://www.coindesk.com/arc/outboundfeeds/rss/" },
   { id: "cointelegraph", name: "Cointelegraph", category: "加密货币", url: "https://cointelegraph.com/rss" },
-  { id: "theblock", name: "The Block", category: "加密货币", url: "https://www.theblock.co/rss" },
+  { id: "cryptoslate", name: "CryptoSlate", category: "加密货币", url: "https://cryptoslate.com/feed/" },
   { id: "decrypt", name: "Decrypt", category: "加密货币", url: "https://decrypt.co/feed" },
+  { id: "bitcoin-magazine", name: "Bitcoin Magazine", category: "加密货币", url: "https://bitcoinmagazine.com/.rss/full/" },
   // Government & Regulatory
   { id: "sec", name: "SEC", category: "政府监管", url: "https://www.sec.gov/news/pressreleases.rss" },
-  { id: "cftc", name: "CFTC", category: "政府监管", url: "https://www.cftc.gov/rss/rss_news.xml" },
   { id: "fed", name: "Federal Reserve", category: "政府监管", url: "https://www.federalreserve.gov/feeds/press_all.xml" },
-  { id: "treasury", name: "U.S. Treasury", category: "政府监管", url: "https://home.treasury.gov/system/files/126/press-releases.rss" },
-  { id: "federal-register", name: "Federal Register", category: "政府监管", url: "https://www.federalregister.gov/api/v1/documents.json?conditions%5Bterm%5D=crypto&per_page=20&order=newest" },
+  { id: "federal-register", name: "Federal Register (Crypto)", category: "政府监管", url: "https://www.federalregister.gov/api/v1/documents.rss?conditions[term]=crypto&per_page=20" },
 ];
