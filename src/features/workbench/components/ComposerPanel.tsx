@@ -1,4 +1,4 @@
-import type { Draft, PublishType, VideoSourceType } from "../types";
+import type { Draft } from "../types";
 import type { BinanceSymbolSearchItem } from "../../../lib/tauri";
 
 export function ComposerPanel({
@@ -14,7 +14,9 @@ export function ComposerPanel({
   setManualSymbolsInput,
   bodyTaggedSymbols,
   allSymbols,
+  removeManualSymbol,
   chooseLocalVideoFile,
+  composerError,
   onQueue,
 }: {
   draft: Draft;
@@ -29,9 +31,14 @@ export function ComposerPanel({
   setManualSymbolsInput: (v: string) => void;
   bodyTaggedSymbols: string[];
   allSymbols: string[];
+  removeManualSymbol: (symbol: string) => void;
   chooseLocalVideoFile: () => void;
+  composerError: string;
   onQueue: () => void;
 }) {
+  const addedSymbols = new Set(allSymbols);
+  const bodyTagged = new Set(bodyTaggedSymbols);
+
   return (
     <section className="panel composer-panel">
       <h2>内容编辑</h2>
@@ -55,7 +62,7 @@ export function ComposerPanel({
       </div>
 
       <div className="composer-grid">
-        <div>
+        <div className="composer-main">
           <label>
             标题
             <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
@@ -105,41 +112,102 @@ export function ComposerPanel({
 
           <label>
             正文
-            <textarea rows={12} value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
+            <textarea
+              rows={14}
+              value={draft.body}
+              onChange={(e) => setDraft({ ...draft, body: e.target.value })}
+              placeholder="正文须保留“信息整理，不构成投资建议”声明。"
+            />
           </label>
+          <p className="char-count">{draft.body.length} 字</p>
         </div>
 
-        <div>
-          <label>
-            搜索币种（官方接口）
-            <input value={symbolQuery} onChange={(e) => setSymbolQuery(e.target.value)} placeholder="输入 BTC / ETH / SOL 等符号" />
-          </label>
-          <div className="symbol-search-box">
-            {symbolSearching && <p className="hint">搜索中...</p>}
-            {!symbolSearching && symbolSearchNotice && <p className="hint">{symbolSearchNotice}</p>}
-            <div className="actions">
-              {symbolSearchResults.map((item) => (
-                <button key={`${item.symbol}-${item.quoteAsset}`} type="button" onClick={() => addSymbolFromSearch(item.symbol)}>
-                  {item.symbol}/{item.quoteAsset}
-                </button>
-              ))}
+        <div className="composer-side">
+          <div className="side-block">
+            <h3>相关币种</h3>
+            <label>
+              搜索币种（官方接口）
+              <input
+                value={symbolQuery}
+                onChange={(e) => setSymbolQuery(e.target.value)}
+                placeholder="输入 BTC / ETH / SOL 等符号"
+              />
+            </label>
+            <div className="symbol-search-box">
+              {symbolSearching && <p className="hint">搜索中...</p>}
+              {!symbolSearching && symbolSearchNotice && <p className="hint">{symbolSearchNotice}</p>}
+              <div className="actions">
+                {symbolSearchResults.map((item) => {
+                  const added = addedSymbols.has(item.symbol);
+                  return (
+                    <button
+                      key={`${item.symbol}-${item.quoteAsset}`}
+                      type="button"
+                      className={added ? "ghost" : ""}
+                      disabled={added}
+                      onClick={() => addSymbolFromSearch(item.symbol)}
+                    >
+                      {item.symbol}/{item.quoteAsset}
+                      {added ? " 已添加" : ""}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+
+            <label>
+              手动补充币种（逗号分隔）
+              <input
+                value={manualSymbolsInput}
+                onChange={(e) => setManualSymbolsInput(e.target.value)}
+                placeholder="例如 BTC,ETH,SOL"
+              />
+            </label>
+
+            <p className="hint">最终附加标签（发送时自动追加到正文末尾）：</p>
+            {allSymbols.length === 0 ? (
+              <p className="hint">未设置。提交前至少需要 1 个币种。</p>
+            ) : (
+              <div className="tag-chips">
+                {allSymbols.map((symbol) => (
+                  <span key={symbol} className={bodyTagged.has(symbol) ? "tag-chip locked" : "tag-chip"}>
+                    #{symbol}
+                    {bodyTagged.has(symbol) ? (
+                      <em>正文</em>
+                    ) : (
+                      <button
+                        type="button"
+                        className="chip-remove"
+                        aria-label={`移除 ${symbol}`}
+                        onClick={() => removeManualSymbol(symbol)}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
-          <label>
-            手动补充币种（逗号分隔）
-            <input value={manualSymbolsInput} onChange={(e) => setManualSymbolsInput(e.target.value)} placeholder="例如 BTC,ETH,SOL" />
-          </label>
-          <p className="hint">正文已含标签：{bodyTaggedSymbols.length ? bodyTaggedSymbols.join(", ") : "无"}。</p>
-          <p className="hint">最终标签：{allSymbols.length ? allSymbols.map((s) => `#${s} $${s}`).join(" ") : "未设置"}。</p>
-
-          <label className="inline">
-            <input type="checkbox" checked={draft.reviewed} onChange={(e) => setDraft({ ...draft, reviewed: e.target.checked })} />
-            已完成人工来源与风险复核
-          </label>
-          <button disabled={!draft.reviewed} onClick={onQueue}>
-            提交发布队列
-          </button>
+          <div className="side-block">
+            <h3>提交</h3>
+            <label className="inline">
+              <input
+                type="checkbox"
+                checked={draft.reviewed}
+                onChange={(e) => setDraft({ ...draft, reviewed: e.target.checked })}
+              />
+              已完成人工来源与风险复核
+            </label>
+            <p className="hint">
+              提交后进入发布队列，仍需在队列页手动发送或设置定时任务，不会自动发布。
+            </p>
+            {composerError && <p className="form-error">{composerError}</p>}
+            <button className="primary wide" disabled={!draft.reviewed} onClick={onQueue}>
+              提交发布队列
+            </button>
+          </div>
         </div>
       </div>
     </section>

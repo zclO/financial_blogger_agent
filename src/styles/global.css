@@ -226,6 +226,22 @@ button:disabled {
   cursor: not-allowed;
 }
 
+button.primary {
+  background: #0f4c5c;
+  border-color: #0f4c5c;
+  color: #ffffff;
+}
+
+button.primary:hover:enabled {
+  background: #0b3d4a;
+}
+
+button.ghost {
+  background: #fff;
+  border-color: #d0d5dd;
+  color: #667085;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -236,6 +252,131 @@ button:disabled {
   background: #0f4c5c;
   border-color: #0f4c5c;
   color: #ffffff;
+}
+
+.segment {
+  display: inline-flex;
+  gap: 0;
+  margin: 12px 0;
+  border: 1px solid #cfd4dc;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.segment button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #334155;
+  font-weight: 600;
+}
+
+.segment button + button {
+  border-left: 1px solid #e4e7ec;
+}
+
+.segment button:hover:enabled {
+  background: #edf2f7;
+}
+
+.segment button.active {
+  background: #0f4c5c;
+  color: #ffffff;
+}
+
+.composer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(260px, 3fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.composer-main,
+.composer-side {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+
+.composer-side {
+  border-left: 1px solid #e4e7ec;
+  padding-left: 24px;
+}
+
+.side-block {
+  display: grid;
+  gap: 2px;
+}
+
+.side-block h3 {
+  margin: 10px 0 4px;
+  font-size: 14px;
+}
+
+.char-count {
+  margin: 4px 0 0;
+  text-align: right;
+  font-size: 12px;
+  color: #667085;
+}
+
+.form-error {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid #f2b8b5;
+  border-radius: 8px;
+  background: #fdf3f2;
+  color: #9a3412;
+  font-size: 13px;
+}
+
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #b8e7ec;
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: #e7f6f8;
+  color: #0f4c5c;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tag-chip em {
+  font-style: normal;
+  font-size: 11px;
+  color: #4aa3ad;
+}
+
+.chip-remove {
+  border: 0;
+  border-radius: 999px;
+  padding: 0 4px;
+  background: transparent;
+  color: #0f4c5c;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.chip-remove:hover:enabled {
+  background: #d3ecef;
+}
+
+.file-picker input {
+  flex: 1;
+}
+
+.file-picker {
+  width: 100%;
 }
 
 .symbol-search-box {
@@ -379,5 +520,16 @@ summary {
 
   .settings .setting-grid {
     grid-template-columns: 1fr;
+  }
+
+  .composer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .composer-side {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid #e4e7ec;
+    padding-top: 16px;
   }
 }
