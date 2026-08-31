@@ -39,13 +39,25 @@ export function App() {
     [pipeline.defaultPipelineId, pipeline.autoProcessTopic],
   );
 
+  // Add titles to the persistent seen set for dedup
+  const addSeenTitles = useCallback(
+    (titles: string[]) => {
+      workspace.setSeenTitles((prev) => {
+        const next = new Set(prev);
+        for (const t of titles) next.add(t);
+        return next;
+      });
+    },
+    [workspace.setSeenTitles],
+  );
+
   // ── Derived values (must be before usePublishing which depends on finalPublishBody) ──
   const finalPublishBody = useMemo(
     () => buildFinalBody(workspace.draft.body, symbols.allSymbols),
     [workspace.draft.body, symbols.allSymbols],
   );
 
-  const news = useNews(workspace.setTopics, setNotice, handleNewTopics);
+  const news = useNews(workspace.setTopics, setNotice, handleNewTopics, workspace.seenTitles, addSeenTitles);
   const publishing = usePublishing(
     workspace.draft,
     workspace.setDraft,

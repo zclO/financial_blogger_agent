@@ -1,11 +1,39 @@
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { loadTopicStore, saveTopicStore } from "../../../lib/tauri";
 import { DEFAULT_DRAFT_BODY, DEFAULT_TOPICS } from "../constants";
 import type { Draft, NewsArticle, Tab, Topic } from "../types";
 
 export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab) => void) {
   const [topics, setTopics] = useState<Topic[]>(DEFAULT_TOPICS);
+  const [seenTitles, setSeenTitles] = useState<Set<string>>(new Set());
+  const [loaded, setLoaded] = useState(false);
+
+  // ── Load from persistence on mount ──
+  useEffect(() => {
+    loadTopicStore()
+      .then((store) => {
+        if (store.topics.length > 0) {
+          setTopics(store.topics);
+        }
+        setSeenTitles(new Set(store.seenTitles));
+        setLoaded(true);
+      })
+      .catch(() => { setLoaded(true); });
+  }, []);
+
+  // ── Debounced save when topics or seenTitles change ──
+  useEffect(() => {
+    if (!loaded) return;
+    const timer = setTimeout(() => {
+      saveTopicStore({
+        topics,
+        seenTitles: [...seenTitles],
+      }).catch((err) => console.error("Failed to save topics:", err));
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [topics, seenTitles, loaded]);
   const [draft, setDraft] = useState<Draft>({
     title: DEFAULT_TOPICS[0].title,
     body: DEFAULT_DRAFT_BODY,
@@ -86,6 +114,7 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
       link: article.link || undefined,
     };
     setTopics((prev) => [newTopic, ...prev]);
+    setSeenTitles((prev) => new Set(prev).add(article.title));
     setNotice(`已将"${article.title}"加入选题池。`);
     setTab("选题池");
   };
@@ -129,6 +158,8 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
   return {
     topics,
     setTopics,
+    seenTitles,
+    setSeenTitles,
     draft,
     setDraft,
     verifiedCount,

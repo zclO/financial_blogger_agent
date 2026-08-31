@@ -173,3 +173,27 @@ export function loadPipelines(): Promise<PipelineStore> {
 export function savePipelines(store: PipelineStore): Promise<void> {
   return invoke<void>("save_pipelines", { store });
 }
+
+// ── Topic Store ──
+
+export interface StoredTopic {
+  id: number;
+  title: string;
+  source: string;
+  verified: boolean;
+  summary?: string;
+  link?: string;
+}
+
+export interface TopicStoreData {
+  topics: StoredTopic[];
+  seenTitles: string[];
+}
+
+export function loadTopicStore(): Promise<TopicStoreData> {
+  return invoke<TopicStoreData>("load_topic_store");
+}
+
+export function saveTopicStore(store: TopicStoreData): Promise<void> {
+  return invoke<void>("save_topic_store", { store });
+}

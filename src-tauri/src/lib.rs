@@ -3,6 +3,7 @@ mod http;
 mod news;
 mod pipeline;
 mod pipeline_store;
+mod topic_store;
 mod workspace;
 
 pub fn run() {
@@ -31,6 +32,9 @@ pub fn run() {
             // pipeline store
             pipeline_store::load_pipelines,
             pipeline_store::save_pipelines,
+            // topic store
+            topic_store::load_topic_store,
+            topic_store::save_topic_store,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Financial Blogger Agent");

@@ -8,6 +8,8 @@ export function useNews(
   setTopics: (fn: (prev: Topic[]) => Topic[]) => void,
   setNotice: (msg: string) => void,
   onNewTopics?: (topics: Topic[]) => void,
+  seenTitles?: Set<string>,
+  addSeenTitles?: (titles: string[]) => void,
 ) {
   const [newsSources, setNewsSources] = useState<NewsSource[]>(DEFAULT_NEWS_SOURCES);
   const [newsResults, setNewsResults] = useState<NewsFetchResult[]>([]);
@@ -18,8 +20,11 @@ export function useNews(
   const importArticlesToTopics = (articles: { title: string; sourceName: string; summary?: string; link?: string }[]): number => {
     let addedCount = 0;
     const newTopics: Topic[] = [];
+    const newTitles: string[] = [];
+    // Use persistent seenTitles for cross-session dedup
+    const seen = seenTitles ?? new Set<string>();
     setTopics((prev) => {
-      const existingTitles = new Set(prev.map((t) => t.title));
+      const existingTitles = new Set([...prev.map((t) => t.title), ...seen]);
       for (const article of articles) {
         if (!article.title || existingTitles.has(article.title)) continue;
         existingTitles.add(article.title);
@@ -31,10 +36,15 @@ export function useNews(
           summary: article.summary || undefined,
           link: article.link || undefined,
         });
+        newTitles.push(article.title);
       }
       addedCount = newTopics.length;
       return newTopics.length > 0 ? [...newTopics, ...prev] : prev;
     });
+    // Persist newly seen titles
+    if (newTitles.length > 0) {
+      addSeenTitles?.(newTitles);
+    }
     // Notify callback with newly added topics
     if (newTopics.length > 0) {
       setTimeout(() => onNewTopicsRef.current?.(newTopics), 0);
