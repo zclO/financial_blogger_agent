@@ -198,3 +198,33 @@ export function loadTopicStore(): Promise<TopicStoreData> {
 export function saveTopicStore(store: TopicStoreData): Promise<void> {
   return invoke<void>("save_topic_store", { store });
 }
+
+// ── Draft Store ──
+
+export interface StoredDraft {
+  title: string;
+  body: string;
+  reviewed: boolean;
+  queued: boolean;
+  publishType: string;
+  videoSourceType: string;
+  videoUrl: string;
+  videoFilePath: string;
+}
+
+export interface DraftStoreData {
+  draft: StoredDraft | null;
+  queueLogs: string[];
+  publishState: string;
+  publishOutput: string;
+  scheduleAtInput: string;
+  allowScheduledPublish: boolean;
+}
+
+export function loadDraftStore(): Promise<DraftStoreData> {
+  return invoke<DraftStoreData>("load_draft_store");
+}
+
+export function saveDraftStore(store: DraftStoreData): Promise<void> {
+  return invoke<void>("save_draft_store", { store });
+}

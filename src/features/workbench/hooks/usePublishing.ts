@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
+  loadDraftStore,
   publishBinanceSquareText,
   publishBinanceSquareVideoFile,
+  saveDraftStore,
   type BinanceSquareConfig,
 } from "../../../lib/tauri";
 import type { Draft, PublishState } from "../types";
@@ -22,6 +24,62 @@ export function usePublishing(
   const [publishState, setPublishState] = useState<PublishState>("idle");
   const [publishOutput, setPublishOutput] = useState("");
   const [queueLogs, setQueueLogs] = useState<string[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  // Ref for draft to use in save effect without causing re-runs
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+
+  // ── Load from persistence on mount ──
+  useEffect(() => {
+    loadDraftStore()
+      .then((store) => {
+        if (store.draft) {
+          setDraft({
+            title: store.draft.title,
+            body: store.draft.body,
+            reviewed: store.draft.reviewed,
+            queued: store.draft.queued,
+            publishType: store.draft.publishType as Draft["publishType"],
+            videoSourceType: store.draft.videoSourceType as Draft["videoSourceType"],
+            videoUrl: store.draft.videoUrl,
+            videoFilePath: store.draft.videoFilePath,
+          });
+        }
+        setQueueLogs(store.queueLogs);
+        setPublishState(store.publishState as PublishState || "idle");
+        setPublishOutput(store.publishOutput);
+        setScheduleAtInput(store.scheduleAtInput);
+        setAllowScheduledPublish(store.allowScheduledPublish);
+        setLoaded(true);
+      })
+      .catch(() => { setLoaded(true); });
+  }, [setDraft]);
+
+  // ── Debounced save when state changes ──
+  useEffect(() => {
+    if (!loaded) return;
+    const timer = setTimeout(() => {
+      saveDraftStore({
+        draft: {
+          title: draftRef.current.title,
+          body: draftRef.current.body,
+          reviewed: draftRef.current.reviewed,
+          queued: draftRef.current.queued,
+          publishType: draftRef.current.publishType,
+          videoSourceType: draftRef.current.videoSourceType,
+          videoUrl: draftRef.current.videoUrl,
+          videoFilePath: draftRef.current.videoFilePath,
+        },
+        queueLogs,
+        publishState,
+        publishOutput,
+        scheduleAtInput,
+        allowScheduledPublish,
+      }).catch((err) => console.error("Failed to save draft:", err));
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [draft, queueLogs, publishState, publishOutput, scheduleAtInput, allowScheduledPublish, loaded]);
 
   const appendQueueLog = (content: string) => {
     setQueueLogs((prev) => [`[${nowText()}] ${content}`, ...prev].slice(0, 30));

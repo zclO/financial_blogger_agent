@@ -1,4 +1,5 @@
 mod binance;
+mod draft_store;
 mod http;
 mod news;
 mod pipeline;
@@ -35,6 +36,9 @@ pub fn run() {
             // topic store
             topic_store::load_topic_store,
             topic_store::save_topic_store,
+            // draft store
+            draft_store::load_draft_store,
+            draft_store::save_draft_store,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Financial Blogger Agent");
