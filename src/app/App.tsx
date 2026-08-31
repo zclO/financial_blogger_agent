@@ -90,8 +90,9 @@ export function App() {
     }
   };
 
-  /** 从选题池触发工作流：显示运行弹窗，等待选择流水线 */
+  /** 从选题池触发工作流：重置状态后显示运行弹窗 */
   const handleRunWorkflow = (topic: Topic) => {
+    pipeline.resetExecution();
     setPendingWorkflowTopic(topic);
     setShowRunModal(true);
   };

@@ -135,6 +135,7 @@ async function executePipeline(
   }
 
   const nodeOutputs = new Map<string, ProcessedArticle>();
+  let anyNodeFailed = false;
   const initial: ProcessedArticle = {
     originalTitle: topic.title,
     originalSummary: topic.summary ?? "",
@@ -187,12 +188,14 @@ async function executePipeline(
         const resp = await callLlm(request);
         appendLog(`  \u2192 \u751F\u6210 ${resp.content.length} \u5B57`);
         nodeOutputs.set(nodeId, { ...input, processedContent: resp.content });
+        appendLog(`\u2705 \u300C${node.name}\u300D\u5904\u7406\u5B8C\u6210\u3002`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         appendLog(`  \u2192 \u5931\u8D25: ${msg}`);
+        appendLog(`\u274C \u300C${node.name}\u300D\u5904\u7406\u5931\u8D25\uFF0C\u6CBF\u7528\u539F\u59CB\u6570\u636E\u3002`);
         nodeOutputs.set(nodeId, input);
+        anyNodeFailed = true;
       }
-      appendLog(`\u2705 \u300C${node.name}\u300D\u5904\u7406\u5B8C\u6210\u3002`);
     } else {
       nodeOutputs.set(nodeId, input);
     }
@@ -206,7 +209,13 @@ async function executePipeline(
       ? terminalIds[terminalIds.length - 1]
       : nodeList[nodeList.length - 1];
   const finalResult = nodeOutputs.get(lastNode.id) ?? initial;
-  appendLog(`\u{1F3C1} \u5DE5\u4F5C\u6D41\u6267\u884C\u5B8C\u6210\u3002`);
+
+  // Check if any node failed
+  if (anyNodeFailed) {
+    appendLog(`\u{1F6A7} \u5DE5\u4F5C\u6D41\u6267\u884C\u5B8C\u6210\uFF08\u90E8\u5206\u8282\u70B9\u5931\u8D25\uFF09\u3002`);
+  } else {
+    appendLog(`\u{1F3C1} \u5DE5\u4F5C\u6D41\u6267\u884C\u5B8C\u6210\u3002`);
+  }
   return [finalResult];
 }
 
@@ -293,6 +302,15 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
     },
     [articleLogEntries],
   );
+
+  // ── Reset execution state (for re-running) ──
+
+  const resetExecution = useCallback(() => {
+    setRunLog([]);
+    setResults([]);
+    setCurrentArticle(null);
+    setRunning(false);
+  }, []);
 
   // ── Pipeline CRUD ──
 
@@ -680,6 +698,7 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
     processArticleWithSavedPipeline,
     runSavedPipeline,
     autoProcessTopic,
+    resetExecution,
     // Article logs
     articleLogEntries,
     getLogsForTopic,
