@@ -4,7 +4,7 @@ import type {
   BinanceSymbolSearchItem,
 } from "../../lib/tauri";
 
-export type Tab = "仪表盘" | "选题池" | "内容工坊" | "发布队列" | "设置";
+export type Tab = "仪表盘" | "选题池" | "新闻源" | "内容工坊" | "发布队列" | "设置";
 export type PublishType = "post" | "article" | "video";
 export type VideoSourceType = "url" | "local";
 export type PublishState = "idle" | "scheduled" | "sending" | "sent" | "failed";
@@ -45,4 +45,27 @@ export type SymbolSearchState = {
   notice: string;
   results: BinanceSymbolSearchItem[];
   manualSymbolsInput: string;
+};
+
+export type NewsSource = {
+  id: string;
+  name: string;
+  category: string;
+  url: string;
+};
+
+export type NewsArticle = {
+  id: string;
+  title: string;
+  link: string;
+  summary: string;
+  sourceId: string;
+  sourceName: string;
+  publishedAt: string | null;
+};
+
+export type NewsFetchResult = {
+  source: NewsSource;
+  articles: NewsArticle[];
+  error: string | null;
 };

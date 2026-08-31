@@ -68,3 +68,34 @@ export function searchBinanceSymbols(payload: {
 }): Promise<BinanceSymbolSearchItem[]> {
   return invoke<BinanceSymbolSearchItem[]>("search_binance_symbols", payload);
 }
+
+export interface NewsSource {
+  id: string;
+  name: string;
+  category: string;
+  url: string;
+}
+
+export interface NewsArticle {
+  id: string;
+  title: string;
+  link: string;
+  summary: string;
+  sourceId: string;
+  sourceName: string;
+  publishedAt: string | null;
+}
+
+export interface NewsFetchResult {
+  source: NewsSource;
+  articles: NewsArticle[];
+  error: string | null;
+}
+
+export function fetchNews(sources: NewsSource[]): Promise<NewsFetchResult[]> {
+  return invoke<NewsFetchResult[]>("fetch_news", { sources });
+}
+
+export function getDefaultNewsSources(): Promise<NewsSource[]> {
+  return invoke<NewsSource[]>("get_default_news_sources");
+}

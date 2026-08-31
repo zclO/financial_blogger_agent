@@ -4,22 +4,28 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   configureBinanceSquare,
+  fetchNews,
   getBinanceSquareConfig,
   getBinanceSquareProxyConfig,
+  getDefaultNewsSources,
   publishBinanceSquareText,
   publishBinanceSquareVideoFile,
   searchBinanceSymbols,
   setBinanceSquareProxyConfig,
   type BinanceSquareConfig,
   type BinanceSquareProxyConfig,
+  type NewsArticle,
+  type NewsFetchResult,
+  type NewsSource,
 } from "../lib/tauri";
 import { ComposerPanel } from "../features/workbench/components/ComposerPanel";
 import { MetricCard } from "../features/workbench/components/MetricCard";
+import { NewsPanel } from "../features/workbench/components/NewsPanel";
 import { QueuePanel } from "../features/workbench/components/QueuePanel";
 import { SettingsPanel } from "../features/workbench/components/SettingsPanel";
 import { Sidebar } from "../features/workbench/components/Sidebar";
 import { TopicsPanel } from "../features/workbench/components/TopicsPanel";
-import { DEFAULT_DRAFT_BODY, DEFAULT_TOPICS, TABS } from "../features/workbench/constants";
+import { DEFAULT_DRAFT_BODY, DEFAULT_NEWS_SOURCES, DEFAULT_TOPICS, TABS } from "../features/workbench/constants";
 import type { Draft, PublishState, Tab, Topic } from "../features/workbench/types";
 import { buildFinalBody, extractTaggedSymbols, normalizeSymbols } from "../features/workbench/utils";
 
@@ -63,6 +69,10 @@ export function App() {
   const [publishState, setPublishState] = useState<PublishState>("idle");
   const [publishOutput, setPublishOutput] = useState("");
   const [queueLogs, setQueueLogs] = useState<string[]>([]);
+
+  const [newsSources, setNewsSources] = useState<NewsSource[]>(DEFAULT_NEWS_SOURCES);
+  const [newsResults, setNewsResults] = useState<NewsFetchResult[]>([]);
+  const [newsFetching, setNewsFetching] = useState(false);
 
   const verifiedCount = useMemo(() => topics.filter((x) => x.verified).length, [topics]);
   const manualSymbols = useMemo(() => normalizeSymbols(manualSymbolsInput), [manualSymbolsInput]);
@@ -345,6 +355,65 @@ export function App() {
 
   const openComposer = () => setTab("内容工坊");
 
+  const fetchAllNews = async () => {
+    setNewsFetching(true);
+    setNotice("");
+    try {
+      const results = await fetchNews(newsSources);
+      setNewsResults(results);
+      const okCount = results.filter((r) => !r.error).length;
+      const errCount = results.filter((r) => r.error).length;
+      const articleCount = results.reduce((s, r) => s + r.articles.length, 0);
+      setNotice(`抓取完成：${okCount} 个源成功，${errCount} 个失败，共 ${articleCount} 篇文章。`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      setNotice(`新闻抓取失败：${msg}`);
+    } finally {
+      setNewsFetching(false);
+    }
+  };
+
+  const fetchSingleSource = async (source: NewsSource) => {
+    setNewsFetching(true);
+    try {
+      const results = await fetchNews([source]);
+      setNewsResults((prev) => {
+        const filtered = prev.filter((r) => r.source.id !== source.id);
+        return [...filtered, ...results];
+      });
+      const r = results[0];
+      if (r?.error) {
+        setNotice(`${source.name} 抓取失败：${r.error}`);
+      } else {
+        setNotice(`${source.name} 抓取成功，${r?.articles.length ?? 0} 篇文章。`);
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      setNotice(`${source.name} 抓取失败：${msg}`);
+    } finally {
+      setNewsFetching(false);
+    }
+  };
+
+  const convertArticleToTopic = (article: NewsArticle) => {
+    const newTopic: Topic = {
+      id: Date.now(),
+      title: article.title,
+      source: `${article.sourceName}（RSS）`,
+      verified: false,
+    };
+    setTopics((prev) => [newTopic, ...prev]);
+    setNotice(`已将"${article.title}"加入选题池。`);
+    setTab("选题池");
+  };
+
+  // Load default news sources from Rust on mount
+  useEffect(() => {
+    getDefaultNewsSources()
+      .then((sources) => setNewsSources(sources))
+      .catch(() => {/* keep DEFAULT_NEWS_SOURCES */});
+  }, []);
+
   return (
     <div className="app">
       <Sidebar tab={tab} tabs={TABS} onChangeTab={setTab} />
@@ -372,6 +441,17 @@ export function App() {
         )}
 
         {tab === "选题池" && <TopicsPanel topics={topics} verify={verifyTopic} openComposer={openComposer} />}
+
+        {tab === "新闻源" && (
+          <NewsPanel
+            sources={newsSources}
+            fetchResults={newsResults}
+            fetching={newsFetching}
+            onFetchAll={() => void fetchAllNews()}
+            onFetchSource={(source) => void fetchSingleSource(source)}
+            onArticleToTopic={convertArticleToTopic}
+          />
+        )}
 
         {tab === "内容工坊" && (
           <ComposerPanel
