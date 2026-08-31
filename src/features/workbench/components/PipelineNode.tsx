@@ -1,4 +1,4 @@
-import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
+import { Handle, Position, useReactFlow, type NodeProps, type Node } from "@xyflow/react";
 
 import type { PipelineNode } from "../types";
 
@@ -14,7 +14,8 @@ const NODE_ICONS: Record<string, string> = {
   llm: "🤖",
 };
 
-export function PipelineNodeComponent({ data, selected }: NodeProps<AppNode>) {
+export function PipelineNodeComponent({ id, data, selected }: NodeProps<AppNode>) {
+  const { deleteElements } = useReactFlow();
   const color = NODE_COLORS[data.kind] ?? "#888";
   const icon = NODE_ICONS[data.kind] ?? "📦";
   const subtitle =
@@ -23,6 +24,11 @@ export function PipelineNodeComponent({ data, selected }: NodeProps<AppNode>) {
       : data.llmConfig?.model
         ? `${data.llmConfig.model}`
         : "未配置模型";
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    deleteElements({ nodes: [{ id }] });
+  };
 
   return (
     <div
@@ -71,6 +77,24 @@ export function PipelineNodeComponent({ data, selected }: NodeProps<AppNode>) {
               {subtitle}
             </div>
           </div>
+          {selected && (
+            <button
+              onClick={handleDelete}
+              title="删除节点"
+              style={{
+                width: 22, height: 22, borderRadius: 4,
+                border: "1px solid #fca5a5", background: "#fef2f2",
+                color: "#ef4444", fontSize: 14, lineHeight: 1,
+                cursor: "pointer", display: "flex",
+                alignItems: "center", justifyContent: "center",
+                padding: 0, transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#fee2e2"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "#fef2f2"; }}
+            >
+              ×
+            </button>
+          )}
         </div>
       </div>
 

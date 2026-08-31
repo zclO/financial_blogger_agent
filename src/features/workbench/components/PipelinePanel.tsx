@@ -5,12 +5,13 @@ import {
   type Node,
   type NodeMouseHandler,
   ReactFlow,
+  type ReactFlowInstance,
   useNodesState,
   useEdgesState,
   type Edge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   LlmNodeConfig,
@@ -69,6 +70,14 @@ export function PipelinePanel({
 }) {
   type AppNode = Node<PipelineNode>;
 
+  // ── Context menu state ──
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number; y: number;
+    nodeId: string | null;
+  } | null>(null);
+  const rfInstance = useRef<ReactFlowInstance<AppNode, Edge> | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
   const flowNodes: AppNode[] = useMemo(
     () =>
       nodes.map((n) => ({
@@ -121,6 +130,53 @@ export function PipelinePanel({
     [onUpdateNodePosition],
   );
 
+  const handleDelete = useCallback(
+    (deletions: { nodes: Node[]; edges: Edge[] }) => {
+      for (const n of deletions.nodes) onRemoveNode(n.id);
+      for (const e of deletions.edges) onRemoveEdge(e.id);
+    },
+    [onRemoveNode, onRemoveEdge],
+  );
+
+  // ── Context menu handlers ──
+
+  const handleNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      event.preventDefault();
+      setCtxMenu({ x: event.clientX, y: event.clientY, nodeId: node.id });
+    },
+    [],
+  );
+
+  const handlePaneContextMenu = useCallback(
+    (event: MouseEvent | React.MouseEvent) => {
+      event.preventDefault();
+      const clientX = "clientX" in event ? event.clientX : (event as MouseEvent).clientX;
+      const clientY = "clientY" in event ? event.clientY : (event as MouseEvent).clientY;
+      setCtxMenu({ x: clientX, y: clientY, nodeId: null });
+    },
+    [],
+  );
+
+  const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const handler = () => setCtxMenu(null);
+    window.addEventListener("click", handler);
+    return () => window.removeEventListener("click", handler);
+  }, [ctxMenu]);
+
+  const handleAddNodeAt = (kind: PipelineNodeKind) => {
+    if (!ctxMenu || !rfInstance.current) return;
+    const pos = rfInstance.current.screenToFlowPosition({
+      x: ctxMenu.x, y: ctxMenu.y,
+    });
+    onAddNode(kind, { x: pos.x, y: pos.y });
+    setCtxMenu(null);
+  };
+
   const handleAddNode = (kind: PipelineNodeKind) => {
     const offset = nodes.length * 80;
     onAddNode(kind, { x: 120 + offset, y: 120 + offset });
@@ -165,7 +221,7 @@ export function PipelinePanel({
         </div>
 
         {/* ── Center: Canvas ── */}
-        <div style={{ flex: 1, minWidth: 0, background: "#f8f9fb" }}>
+        <div ref={canvasRef} style={{ flex: 1, minWidth: 0, background: "#f8f9fb", position: "relative" }}>
           <ReactFlow
             nodes={rfNodes}
             edges={rfEdges}
@@ -175,6 +231,10 @@ export function PipelinePanel({
             onNodeClick={handleNodeClick}
             onPaneClick={handlePaneClick}
             onNodeDragStop={handleNodeDragStop}
+            onDelete={handleDelete}
+            onInit={(inst) => { rfInstance.current = inst; }}
+            onNodeContextMenu={handleNodeContextMenu}
+            onPaneContextMenu={handlePaneContextMenu}
             nodeTypes={nodeTypes}
             defaultEdgeOptions={defaultEdgeOptions}
             fitView
@@ -186,6 +246,32 @@ export function PipelinePanel({
               style={{ borderRadius: 8, border: "1px solid #e5e7eb" }}
             />
           </ReactFlow>
+
+          {/* ── Context menu ── */}
+          {ctxMenu && (
+            <ContextMenu
+              x={ctxMenu.x}
+              y={ctxMenu.y}
+              anchor={canvasRef.current}
+              onClose={closeCtxMenu}
+            >
+              {ctxMenu.nodeId ? (
+                <>
+                  <CtxItem
+                    icon="🗑️" label="删除节点" danger
+                    onClick={() => { onRemoveNode(ctxMenu.nodeId!); closeCtxMenu(); }}
+                  />
+                </>
+              ) : (
+                <>
+                  <CtxItem icon="📰" label="添加信息源"
+                    onClick={() => handleAddNodeAt("source")} />
+                  <CtxItem icon="🤖" label="添加大模型"
+                    onClick={() => handleAddNodeAt("llm")} />
+                </>
+              )}
+            </ContextMenu>
+          )}
         </div>
 
         {/* ── Right: Config panel ── */}
@@ -328,6 +414,60 @@ export function PipelinePanel({
 }
 
 // ── Sub-components ──
+
+function ContextMenu({
+  x, y, anchor, onClose, children,
+}: {
+  x: number; y: number;
+  anchor: HTMLElement | null;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  // Convert viewport coords to container-relative
+  const rect = anchor?.getBoundingClientRect();
+  const left = rect ? x - rect.left : x;
+  const top = rect ? y - rect.top : y;
+
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.preventDefault()}
+      style={{
+        position: "absolute", left, top, zIndex: 1000,
+        background: "#fff", borderRadius: 8,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.08)",
+        border: "1px solid #e5e7eb", padding: "4px 0",
+        minWidth: 160, fontSize: 13,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function CtxItem({
+  icon, label, danger, onClick,
+}: {
+  icon: string; label: string; danger?: boolean; onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex", alignItems: "center", gap: 8,
+        width: "100%", padding: "8px 14px", border: "none",
+        background: "none", cursor: "pointer", textAlign: "left",
+        color: danger ? "#ef4444" : "#333", fontSize: 13,
+        transition: "background 0.1s",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = danger ? "#fef2f2" : "#f5f5f5"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+    >
+      <span style={{ fontSize: 14 }}>{icon}</span>
+      {label}
+    </button>
+  );
+}
 
 function PaletteButton({
   icon, label, desc, color, onClick,
