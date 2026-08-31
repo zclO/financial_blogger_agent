@@ -30,8 +30,12 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
 
   const openComposer = (topic?: Topic) => {
     if (topic) {
-      const bodyParts = [topic.title];
-      if (topic.summary) bodyParts.push("", topic.summary);
+      const bodyParts: string[] = [topic.title, ""];
+      if (topic.summary) {
+        bodyParts.push(topic.summary);
+      } else {
+        bodyParts.push(`来源：${topic.source}`);
+      }
       if (topic.link) bodyParts.push("", `原文链接：${topic.link}`);
       bodyParts.push("", "信息整理，不构成投资建议。");
       setDraft({

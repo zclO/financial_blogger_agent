@@ -62,6 +62,31 @@ fn extract_text(t: &feed_rs::model::Text) -> String {
     t.content.clone()
 }
 
+/// Strip HTML tags and decode common entities from RSS content.
+fn strip_html(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let mut in_tag = false;
+    for c in input.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => result.push(c),
+            _ => {}
+        }
+    }
+    // Decode common HTML entities
+    result
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#x27;", "'")
+        .replace("&#39;", "'")
+        .replace("&nbsp;", " ")
+        .trim()
+        .to_string()
+}
+
 fn map_entry_to_article(
     entry: &feed_rs::model::Entry,
     source: &NewsSourceDto,
@@ -70,7 +95,7 @@ fn map_entry_to_article(
     let title = entry
         .title
         .as_ref()
-        .map(|t| extract_text(t))
+        .map(|t| strip_html(&extract_text(t)))
         .unwrap_or_default();
 
     let link = entry
@@ -79,15 +104,19 @@ fn map_entry_to_article(
         .map(|l| l.href.clone())
         .unwrap_or_default();
 
-    let summary = entry
+    // Try summary first, then content body, then media descriptions
+    let raw_summary = entry
         .summary
         .as_ref()
         .map(|s| extract_text(s))
         .or_else(|| entry.content.as_ref().and_then(|c| c.body.clone()))
         .unwrap_or_default();
 
-    let summary = if summary.len() > 300 {
-        format!("{}...", &summary[..300])
+    let summary = strip_html(&raw_summary);
+
+    // Truncate to ~500 chars for readability
+    let summary = if summary.len() > 500 {
+        format!("{}...", &summary[..500])
     } else {
         summary
     };

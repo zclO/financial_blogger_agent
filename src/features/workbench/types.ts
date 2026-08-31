@@ -4,7 +4,7 @@ import type {
   BinanceSymbolSearchItem,
 } from "../../lib/tauri";
 
-export type Tab = "仪表盘" | "选题池" | "新闻源" | "内容工坊" | "发布队列" | "设置";
+export type Tab = "仪表盘" | "选题池" | "新闻源" | "流水线" | "内容工坊" | "发布队列" | "设置";
 export type PublishType = "post" | "article" | "video";
 export type VideoSourceType = "url" | "local";
 export type PublishState = "idle" | "scheduled" | "sending" | "sent" | "failed";
@@ -68,4 +68,46 @@ export type NewsFetchResult = {
   source: NewsSource;
   articles: NewsArticle[];
   error: string | null;
+};
+
+// ── Pipeline types ──
+
+export type PipelineNodeKind = "source" | "llm";
+
+export type SourceNodeConfig = {
+  /** 选中的新闻源 ID 列表，空数组表示全部 */
+  sourceIds: string[];
+};
+
+export type LlmNodeConfig = {
+  apiEndpoint: string;
+  apiKey: string;
+  model: string;
+  systemPrompt: string;
+  userPromptTemplate: string;
+  temperature: number;
+  maxTokens: number;
+};
+
+export type PipelineNode = {
+  id: string;
+  kind: PipelineNodeKind;
+  name: string;
+  position: { x: number; y: number };
+  sourceConfig?: SourceNodeConfig;
+  llmConfig?: LlmNodeConfig;
+};
+
+export type ProcessedArticle = {
+  originalTitle: string;
+  originalSummary: string;
+  sourceName: string;
+  link: string;
+  processedContent: string;
+};
+
+export type FlowEdge = {
+  id: string;
+  source: string;
+  target: string;
 };

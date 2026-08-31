@@ -99,3 +99,31 @@ export function fetchNews(sources: NewsSource[]): Promise<NewsFetchResult[]> {
 export function getDefaultNewsSources(): Promise<NewsSource[]> {
   return invoke<NewsSource[]>("get_default_news_sources");
 }
+
+// ── Pipeline / LLM ──
+
+export interface LlmRequest {
+  apiEndpoint: string;
+  apiKey: string;
+  model: string;
+  systemPrompt: string;
+  userPrompt: string;
+  temperature: number;
+  maxTokens: number;
+}
+
+export interface LlmUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface LlmResponse {
+  content: string;
+  model: string;
+  usage: LlmUsage | null;
+}
+
+export function callLlm(request: LlmRequest): Promise<LlmResponse> {
+  return invoke<LlmResponse>("call_llm", { request });
+}

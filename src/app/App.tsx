@@ -3,17 +3,19 @@ import { useMemo, useState } from "react";
 import { ComposerPanel } from "../features/workbench/components/ComposerPanel";
 import { MetricCard } from "../features/workbench/components/MetricCard";
 import { NewsPanel } from "../features/workbench/components/NewsPanel";
+import { PipelinePanel } from "../features/workbench/components/PipelinePanel";
 import { QueuePanel } from "../features/workbench/components/QueuePanel";
 import { SettingsPanel } from "../features/workbench/components/SettingsPanel";
 import { Sidebar } from "../features/workbench/components/Sidebar";
 import { TopicsPanel } from "../features/workbench/components/TopicsPanel";
 import { TABS } from "../features/workbench/constants";
 import { useNews } from "../features/workbench/hooks/useNews";
+import { usePipeline } from "../features/workbench/hooks/usePipeline";
 import { usePublishing } from "../features/workbench/hooks/usePublishing";
 import { useSquare } from "../features/workbench/hooks/useSquare";
 import { useSymbolSearch } from "../features/workbench/hooks/useSymbolSearch";
 import { useWorkspace } from "../features/workbench/hooks/useWorkspace";
-import type { Tab } from "../features/workbench/types";
+import type { Tab, Topic } from "../features/workbench/types";
 import { buildFinalBody } from "../features/workbench/utils";
 
 export function App() {
@@ -32,6 +34,7 @@ export function App() {
   );
 
   const news = useNews(workspace.setTopics, setNotice);
+  const pipeline = usePipeline();
   const publishing = usePublishing(
     workspace.draft,
     workspace.setDraft,
@@ -50,6 +53,12 @@ export function App() {
       publishing.setPublishState("idle");
       publishing.setPublishOutput("");
     }
+  };
+
+  /** 从选题池触发工作流：跳转到流水线 Tab 并执行 */
+  const handleRunWorkflow = (topic: Topic) => {
+    setTab("流水线");
+    void pipeline.processArticle(topic);
   };
 
   // ── Render ──
@@ -75,12 +84,12 @@ export function App() {
               <MetricCard n={workspace.verifiedCount} t="可生成草稿" />
               <MetricCard n={workspace.draft.queued ? 1 : 0} t="待人工发布" />
             </section>
-            <TopicsPanel topics={workspace.topics} verify={workspace.verifyTopic} verifyMany={workspace.verifyMany} openComposer={workspace.openComposer} />
+            <TopicsPanel topics={workspace.topics} verify={workspace.verifyTopic} verifyMany={workspace.verifyMany} openComposer={workspace.openComposer} onRunWorkflow={handleRunWorkflow} />
           </>
         )}
 
         {tab === "选题池" && (
-          <TopicsPanel topics={workspace.topics} verify={workspace.verifyTopic} verifyMany={workspace.verifyMany} openComposer={workspace.openComposer} />
+          <TopicsPanel topics={workspace.topics} verify={workspace.verifyTopic} verifyMany={workspace.verifyMany} openComposer={workspace.openComposer} onRunWorkflow={handleRunWorkflow} />
         )}
 
         {tab === "新闻源" && (
@@ -91,6 +100,27 @@ export function App() {
             onFetchAll={() => void news.fetchAllNews()}
             onFetchSource={(source) => void news.fetchSingleSource(source)}
             onArticleToTopic={workspace.convertArticleToTopic}
+          />
+        )}
+
+        {tab === "流水线" && (
+          <PipelinePanel
+            nodes={pipeline.nodes}
+            edges={pipeline.edges}
+            selectedNodeId={pipeline.selectedNodeId}
+            selectedNode={pipeline.selectedNode}
+            onSelectNode={pipeline.setSelectedNodeId}
+            onAddNode={pipeline.addNode}
+            onRemoveNode={pipeline.removeNode}
+            onUpdateNodePosition={pipeline.updateNodePosition}
+            onUpdateLlmConfig={pipeline.updateLlmConfig}
+            onAddEdge={pipeline.addEdge}
+            onRemoveEdge={pipeline.removeEdge}
+            running={pipeline.running}
+            results={pipeline.results}
+            runLog={pipeline.runLog}
+            currentArticle={pipeline.currentArticle}
+            newsSources={news.newsSources}
           />
         )}
 

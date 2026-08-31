@@ -7,11 +7,13 @@ export function TopicsPanel({
   verify,
   verifyMany,
   openComposer,
+  onRunWorkflow,
 }: {
   topics: Topic[];
   verify: (id: number) => void;
   verifyMany: (ids: number[]) => void;
   openComposer: (topic?: Topic) => void;
+  onRunWorkflow: (topic: Topic) => void;
 }) {
   const [keyword, setKeyword] = useState("");
 
@@ -69,11 +71,18 @@ export function TopicsPanel({
               {x.source} · {x.verified ? "已核验" : "待核验"}
             </small>
           </div>
-          {x.verified ? (
-            <button onClick={() => openComposer(x)}>编辑草稿</button>
-          ) : (
-            <button onClick={() => verify(x.id)}>标为已核验</button>
-          )}
+          <div style={{ display: "flex", gap: "0.25rem" }}>
+            {x.verified ? (
+              <>
+                <button onClick={() => openComposer(x)}>编辑草稿</button>
+                <button onClick={() => onRunWorkflow(x)} title="用工作流加工此文章">
+                  ▶ 工作流
+                </button>
+              </>
+            ) : (
+              <button onClick={() => verify(x.id)}>标为已核验</button>
+            )}
+          </div>
         </div>
       ))}
     </section>

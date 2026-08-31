@@ -1,6 +1,6 @@
-import type { Tab, Topic, NewsSource } from "./types";
+import type { Tab, Topic, NewsSource, PipelineNode } from "./types";
 
-export const TABS: Tab[] = ["仪表盘", "选题池", "新闻源", "内容工坊", "发布队列", "设置"];
+export const TABS: Tab[] = ["仪表盘", "选题池", "新闻源", "流水线", "内容工坊", "发布队列", "设置"];
 
 export const DEFAULT_TOPICS: Topic[] = [
   { id: 1, title: "以太坊生态升级官方公告", source: "项目官方 API（示例）", verified: true },
@@ -21,4 +21,37 @@ export const DEFAULT_NEWS_SOURCES: NewsSource[] = [
   { id: "sec", name: "SEC", category: "政府监管", url: "https://www.sec.gov/news/pressreleases.rss" },
   { id: "fed", name: "Federal Reserve", category: "政府监管", url: "https://www.federalreserve.gov/feeds/press_all.xml" },
   { id: "federal-register", name: "Federal Register (Crypto)", category: "政府监管", url: "https://www.federalregister.gov/api/v1/documents.rss?conditions[term]=crypto&per_page=20" },
+];
+
+// ── Pipeline defaults ──
+
+export const DEFAULT_LLM_SYSTEM_PROMPT =
+  "你是一位专业的加密货币财经编辑。请根据提供的新闻素材，撰写一篇简明扼要的中文财经资讯。要求：\n1. 客观准确，不添加未经证实的信息\n2. 语言简洁，适合社交媒体发布\n3. 在末尾标注信息来源\n4. 必须包含\u201c信息整理，不构成投资建议\u201d声明";
+
+export const DEFAULT_LLM_USER_PROMPT =
+  "标题：{{title}}\n来源：{{source}}\n摘要：{{summary}}\n链接：{{link}}\n\n请根据以上新闻素材撰写一篇财经资讯。";
+
+export const DEFAULT_PIPELINE_NODES: PipelineNode[] = [
+  {
+    id: "source-default",
+    kind: "source",
+    name: "新闻源",
+    position: { x: 100, y: 150 },
+    sourceConfig: { sourceIds: [] },
+  },
+  {
+    id: "llm-default",
+    kind: "llm",
+    name: "大模型加工",
+    position: { x: 400, y: 150 },
+    llmConfig: {
+      apiEndpoint: "https://api.openai.com/v1/chat/completions",
+      apiKey: "",
+      model: "gpt-4o-mini",
+      systemPrompt: DEFAULT_LLM_SYSTEM_PROMPT,
+      userPromptTemplate: DEFAULT_LLM_USER_PROMPT,
+      temperature: 0.7,
+      maxTokens: 2000,
+    },
+  },
 ];

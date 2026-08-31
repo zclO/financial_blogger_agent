@@ -1,0 +1,91 @@
+import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
+
+import type { PipelineNode } from "../types";
+
+type AppNode = Node<PipelineNode>;
+
+const NODE_COLORS: Record<string, string> = {
+  source: "#52c41a",
+  llm: "#7c3aed",
+};
+
+const NODE_ICONS: Record<string, string> = {
+  source: "📰",
+  llm: "🤖",
+};
+
+export function PipelineNodeComponent({ data, selected }: NodeProps<AppNode>) {
+  const color = NODE_COLORS[data.kind] ?? "#888";
+  const icon = NODE_ICONS[data.kind] ?? "📦";
+  const subtitle =
+    data.kind === "source"
+      ? "文章输入"
+      : data.llmConfig?.model
+        ? `${data.llmConfig.model}`
+        : "未配置模型";
+
+  return (
+    <div
+      style={{
+        minWidth: 200,
+        maxWidth: 260,
+        borderRadius: 10,
+        border: selected ? `2px solid ${color}` : "1px solid #e5e7eb",
+        background: "#fff",
+        boxShadow: selected
+          ? `0 0 0 3px ${color}22, 0 2px 8px rgba(0,0,0,0.08)`
+          : "0 1px 4px rgba(0,0,0,0.06)",
+        overflow: "hidden",
+        transition: "box-shadow 0.2s, border-color 0.2s",
+        fontFamily:
+          '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      }}
+    >
+      {/* Color accent bar */}
+      <div style={{ height: 3, background: color }} />
+
+      {/* Input handle */}
+      {data.kind !== "source" && (
+        <Handle
+          type="target"
+          position={Position.Left}
+          style={{
+            background: color,
+            width: 8,
+            height: 8,
+            border: "2px solid #fff",
+            left: -4,
+          }}
+        />
+      )}
+
+      {/* Header */}
+      <div style={{ padding: "10px 14px 8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 18 }}>{icon}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 13, color: "#111" }}>
+              {data.name}
+            </div>
+            <div style={{ fontSize: 11, color: "#888", marginTop: 1 }}>
+              {subtitle}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Output handle */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        style={{
+          background: color,
+          width: 8,
+          height: 8,
+          border: "2px solid #fff",
+          right: -4,
+        }}
+      />
+    </div>
+  );
+}
