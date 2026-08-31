@@ -8,12 +8,14 @@ export function TopicsPanel({
   verifyMany,
   openComposer,
   onRunWorkflow,
+  onViewLogs,
 }: {
   topics: Topic[];
   verify: (id: number) => void;
   verifyMany: (ids: number[]) => void;
   openComposer: (topic?: Topic) => void;
   onRunWorkflow: (topic: Topic) => void;
+  onViewLogs: (topic: Topic) => void;
 }) {
   const [keyword, setKeyword] = useState("");
 
@@ -82,6 +84,9 @@ export function TopicsPanel({
                 <button onClick={() => openComposer(x)}>编辑草稿</button>
                 <button onClick={() => onRunWorkflow(x)} title="用工作流加工此文章">
                   ▶ 工作流
+                </button>
+                <button onClick={() => onViewLogs(x)} title="查看运行日志" style={{ background: "#f5f5f5", borderColor: "#ddd", color: "#666" }}>
+                  📜
                 </button>
               </>
             ) : (

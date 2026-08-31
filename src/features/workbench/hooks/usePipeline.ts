@@ -2,8 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   callLlm,
+  loadArticleLogStore,
   loadPipelines,
+  saveArticleLogStore,
   savePipelines,
+  type ArticleLogEntry,
   type LlmRequest,
   type StoredPipeline,
 } from "../../../lib/tauri";
@@ -216,6 +219,9 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
   const [editingPipelineId, setEditingPipelineId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
 
+  // Article log entries (persisted)
+  const [articleLogEntries, setArticleLogEntries] = useState<ArticleLogEntry[]>([]);
+
   // Callback ref to avoid stale closures
   const onCompleteRef = useRef(onProcessComplete);
   onCompleteRef.current = onProcessComplete;
@@ -246,6 +252,12 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
         setDefaultPipelineId(store.defaultPipelineId);
       })
       .catch(() => {/* no pipelines yet */});
+
+    loadArticleLogStore()
+      .then((store) => {
+        setArticleLogEntries(store.entries);
+      })
+      .catch(() => {/* no logs yet */});
   }, []);
 
   // ── Persist helper ──
@@ -258,6 +270,28 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
       }).catch((err) => console.error("Failed to save pipelines:", err));
     },
     [],
+  );
+
+  // ── Article log persistence helper ──
+
+  const persistArticleLog = useCallback(
+    (entry: ArticleLogEntry) => {
+      setArticleLogEntries((prev) => {
+        const updated = [entry, ...prev].slice(0, 100); // Keep last 100 entries
+        saveArticleLogStore({ entries: updated }).catch((err) =>
+          console.error("Failed to save article logs:", err)
+        );
+        return updated;
+      });
+    },
+    [],
+  );
+
+  const getLogsForTopic = useCallback(
+    (topicId: number) => {
+      return articleLogEntries.filter((e) => e.topicId === topicId);
+    },
+    [articleLogEntries],
   );
 
   // ── Pipeline CRUD ──
@@ -470,16 +504,42 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
     setResults([]);
     setRunLog([]);
     setCurrentArticle(topic);
+    const collectedLogs: string[] = [];
+    const collectLog = (msg: string) => {
+      const timestamped = `[${new Date().toLocaleTimeString("zh-CN", { hour12: false })}] ${msg}`;
+      collectedLogs.push(timestamped);
+      appendLog(msg);
+    };
+    const startTime = new Date().toISOString();
     try {
-      const res = await executePipeline(nodes, edges, topic, appendLog);
+      const res = await executePipeline(nodes, edges, topic, collectLog);
       setResults(res);
       // Persist processed content back to the topic
       if (res.length > 0 && res[0].processedContent) {
         onCompleteRef.current?.(topic.id, res[0].processedContent);
       }
+      // Persist log entry
+      const hasError = collectedLogs.some((l) => l.includes("❌") || l.includes("失败"));
+      persistArticleLog({
+        id: `log-${Date.now()}`,
+        topicId: topic.id,
+        topicTitle: topic.title,
+        timestamp: startTime,
+        status: hasError ? "failed" : "completed",
+        logs: collectedLogs,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      appendLog(`\u274C \u5DE5\u4F5C\u6D41\u6267\u884C\u51FA\u9519: ${msg}`);
+      collectLog(`\u274C \u5DE5\u4F5C\u6D41\u6267\u884C\u51FA\u9519: ${msg}`);
+      // Persist log entry on error
+      persistArticleLog({
+        id: `log-${Date.now()}`,
+        topicId: topic.id,
+        topicTitle: topic.title,
+        timestamp: startTime,
+        status: "failed",
+        logs: collectedLogs,
+      });
     } finally {
       setRunning(false);
     }
@@ -500,6 +560,57 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
       return res;
     } catch {
       return [];
+    }
+  };
+
+  // ── Execute a saved pipeline with full UI state and log persistence ──
+
+  const processArticleWithSavedPipeline = async (pipelineId: string, topic: Topic) => {
+    const pl = savedPipelines.find((p) => p.id === pipelineId);
+    if (!pl) {
+      appendLog("未找到指定的流水线。");
+      return;
+    }
+    setRunning(true);
+    setResults([]);
+    setRunLog([]);
+    setCurrentArticle(topic);
+    const collectedLogs: string[] = [];
+    const collectLog = (msg: string) => {
+      const timestamped = `[${new Date().toLocaleTimeString("zh-CN", { hour12: false })}] ${msg}`;
+      collectedLogs.push(timestamped);
+      appendLog(msg);
+    };
+    const startTime = new Date().toISOString();
+    collectLog(`📋 使用流水线「${pl.name}」处理：${topic.title}`);
+    try {
+      const res = await executePipeline(pl.nodes, pl.edges, topic, collectLog);
+      setResults(res);
+      if (res.length > 0 && res[0].processedContent) {
+        onCompleteRef.current?.(topic.id, res[0].processedContent);
+      }
+      const hasError = collectedLogs.some((l) => l.includes("❌") || l.includes("失败"));
+      persistArticleLog({
+        id: `log-${Date.now()}`,
+        topicId: topic.id,
+        topicTitle: topic.title,
+        timestamp: startTime,
+        status: hasError ? "failed" : "completed",
+        logs: collectedLogs,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      collectLog(`\u274C 工作流执行出错: ${msg}`);
+      persistArticleLog({
+        id: `log-${Date.now()}`,
+        topicId: topic.id,
+        topicTitle: topic.title,
+        timestamp: startTime,
+        status: "failed",
+        logs: collectedLogs,
+      });
+    } finally {
+      setRunning(false);
     }
   };
 
@@ -566,7 +677,11 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
     runLog,
     currentArticle,
     processArticle,
+    processArticleWithSavedPipeline,
     runSavedPipeline,
     autoProcessTopic,
+    // Article logs
+    articleLogEntries,
+    getLogsForTopic,
   };
 }

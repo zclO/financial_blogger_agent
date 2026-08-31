@@ -8,6 +8,11 @@ import { QueuePanel } from "../features/workbench/components/QueuePanel";
 import { SettingsPanel } from "../features/workbench/components/SettingsPanel";
 import { Sidebar } from "../features/workbench/components/Sidebar";
 import { TopicsPanel } from "../features/workbench/components/TopicsPanel";
+import {
+  ArticleLogDetailModal,
+  ArticleLogHistoryModal,
+  WorkflowRunModal,
+} from "../features/workbench/components/WorkflowRunModal";
 import { TABS } from "../features/workbench/constants";
 import { useNews } from "../features/workbench/hooks/useNews";
 import { usePipeline } from "../features/workbench/hooks/usePipeline";
@@ -16,11 +21,18 @@ import { useSquare } from "../features/workbench/hooks/useSquare";
 import { useSymbolSearch } from "../features/workbench/hooks/useSymbolSearch";
 import { useWorkspace } from "../features/workbench/hooks/useWorkspace";
 import type { Tab, Topic } from "../features/workbench/types";
+import type { ArticleLogEntry } from "../lib/tauri";
 import { buildFinalBody } from "../features/workbench/utils";
 
 export function App() {
   const [tab, setTab] = useState<Tab>("仪表盘");
   const [notice, setNotice] = useState("未连接外部数据源；当前仅使用本地演示数据。");
+
+  // Modal states
+  const [showRunModal, setShowRunModal] = useState(false);
+  const [showLogHistory, setShowLogHistory] = useState(false);
+  const [selectedLogEntry, setSelectedLogEntry] = useState<ArticleLogEntry | null>(null);
+  const [pendingWorkflowTopic, setPendingWorkflowTopic] = useState<Topic | null>(null);
 
   // ── Feature hooks ──
   const workspace = useWorkspace(setNotice, setTab);
@@ -78,10 +90,21 @@ export function App() {
     }
   };
 
-  /** 从选题池触发工作流：跳转到流水线 Tab 并执行 */
+  /** 从选题池触发工作流：显示运行弹窗，等待选择流水线 */
   const handleRunWorkflow = (topic: Topic) => {
-    setTab("流水线");
-    void pipeline.processArticle(topic);
+    setPendingWorkflowTopic(topic);
+    setShowRunModal(true);
+  };
+
+  /** 在弹窗中选择流水线后执行 */
+  const handleRunPipeline = (pipelineId: string) => {
+    if (!pendingWorkflowTopic) return;
+    void pipeline.processArticleWithSavedPipeline(pipelineId, pendingWorkflowTopic);
+  };
+
+  /** 查看文章的历史运行日志 */
+  const handleViewLogs = (topic: Topic) => {
+    setShowLogHistory(true);
   };
 
   // ── Render ──
@@ -107,12 +130,26 @@ export function App() {
               <MetricCard n={workspace.verifiedCount} t="可生成草稿" />
               <MetricCard n={workspace.draft.queued ? 1 : 0} t="待人工发布" />
             </section>
-            <TopicsPanel topics={workspace.topics} verify={workspace.verifyTopic} verifyMany={workspace.verifyMany} openComposer={workspace.openComposer} onRunWorkflow={handleRunWorkflow} />
+            <TopicsPanel 
+              topics={workspace.topics} 
+              verify={workspace.verifyTopic} 
+              verifyMany={workspace.verifyMany} 
+              openComposer={workspace.openComposer} 
+              onRunWorkflow={handleRunWorkflow}
+              onViewLogs={handleViewLogs}
+            />
           </>
         )}
 
         {tab === "选题池" && (
-          <TopicsPanel topics={workspace.topics} verify={workspace.verifyTopic} verifyMany={workspace.verifyMany} openComposer={workspace.openComposer} onRunWorkflow={handleRunWorkflow} />
+          <TopicsPanel 
+            topics={workspace.topics} 
+            verify={workspace.verifyTopic} 
+            verifyMany={workspace.verifyMany} 
+            openComposer={workspace.openComposer} 
+            onRunWorkflow={handleRunWorkflow}
+            onViewLogs={handleViewLogs}
+          />
         )}
 
         {tab === "新闻源" && (
@@ -226,6 +263,44 @@ export function App() {
           />
         )}
       </main>
+
+      {/* Workflow Run Modal */}
+      {showRunModal && (
+        <WorkflowRunModal
+          topic={pendingWorkflowTopic}
+          running={pipeline.running}
+          runLog={pipeline.runLog}
+          results={pipeline.results}
+          savedPipelines={pipeline.savedPipelines}
+          defaultPipelineId={pipeline.defaultPipelineId}
+          onRun={handleRunPipeline}
+          onClose={() => {
+            setShowRunModal(false);
+            setPendingWorkflowTopic(null);
+          }}
+        />
+      )}
+
+      {/* Article Log History Modal */}
+      {showLogHistory && !selectedLogEntry && (
+        <ArticleLogHistoryModal
+          entries={pipeline.articleLogEntries}
+          onClose={() => setShowLogHistory(false)}
+          onViewEntry={(entry) => setSelectedLogEntry(entry)}
+        />
+      )}
+
+      {/* Article Log Detail Modal */}
+      {showLogHistory && selectedLogEntry && (
+        <ArticleLogDetailModal
+          entry={selectedLogEntry}
+          onClose={() => {
+            setSelectedLogEntry(null);
+            setShowLogHistory(false);
+          }}
+          onBack={() => setSelectedLogEntry(null)}
+        />
+      )}
     </div>
   );
 }

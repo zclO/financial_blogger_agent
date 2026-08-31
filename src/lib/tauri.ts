@@ -228,3 +228,26 @@ export function loadDraftStore(): Promise<DraftStoreData> {
 export function saveDraftStore(store: DraftStoreData): Promise<void> {
   return invoke<void>("save_draft_store", { store });
 }
+
+// ── Article Log Store ──
+
+export interface ArticleLogEntry {
+  id: string;
+  topicId: number;
+  topicTitle: string;
+  timestamp: string;
+  status: string;
+  logs: string[];
+}
+
+export interface ArticleLogStoreData {
+  entries: ArticleLogEntry[];
+}
+
+export function loadArticleLogStore(): Promise<ArticleLogStoreData> {
+  return invoke<ArticleLogStoreData>("load_article_log_store");
+}
+
+export function saveArticleLogStore(store: ArticleLogStoreData): Promise<void> {
+  return invoke<void>("save_article_log_store", { store });
+}
