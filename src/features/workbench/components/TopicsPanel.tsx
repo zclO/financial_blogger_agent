@@ -11,7 +11,7 @@ export function TopicsPanel({
   topics: Topic[];
   verify: (id: number) => void;
   verifyMany: (ids: number[]) => void;
-  openComposer: () => void;
+  openComposer: (topic?: Topic) => void;
 }) {
   const [keyword, setKeyword] = useState("");
 
@@ -70,7 +70,7 @@ export function TopicsPanel({
             </small>
           </div>
           {x.verified ? (
-            <button onClick={openComposer}>编辑草稿</button>
+            <button onClick={() => openComposer(x)}>编辑草稿</button>
           ) : (
             <button onClick={() => verify(x.id)}>标为已核验</button>
           )}

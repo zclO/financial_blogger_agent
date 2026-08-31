@@ -9,7 +9,7 @@ export type PublishType = "post" | "article" | "video";
 export type VideoSourceType = "url" | "local";
 export type PublishState = "idle" | "scheduled" | "sending" | "sent" | "failed";
 
-export type Topic = { id: number; title: string; source: string; verified: boolean };
+export type Topic = { id: number; title: string; source: string; verified: boolean; summary?: string; link?: string };
 
 export type Draft = {
   title: string;

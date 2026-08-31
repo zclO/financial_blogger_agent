@@ -9,7 +9,7 @@ export function useNews(setTopics: (fn: (prev: Topic[]) => Topic[]) => void, set
   const [newsResults, setNewsResults] = useState<NewsFetchResult[]>([]);
   const [newsFetching, setNewsFetching] = useState(false);
 
-  const importArticlesToTopics = (articles: { title: string; sourceName: string }[]): number => {
+  const importArticlesToTopics = (articles: { title: string; sourceName: string; summary?: string; link?: string }[]): number => {
     let addedCount = 0;
     setTopics((prev) => {
       const existingTitles = new Set(prev.map((t) => t.title));
@@ -22,6 +22,8 @@ export function useNews(setTopics: (fn: (prev: Topic[]) => Topic[]) => void, set
           title: article.title,
           source: `${article.sourceName}（RSS）`,
           verified: false,
+          summary: article.summary || undefined,
+          link: article.link || undefined,
         });
       }
       addedCount = newTopics.length;

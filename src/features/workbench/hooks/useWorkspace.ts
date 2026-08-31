@@ -28,7 +28,25 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
     setTopics((prev) => prev.map((x) => (idSet.has(x.id) ? { ...x, verified: true } : x)));
   };
 
-  const openComposer = () => setTab("内容工坊");
+  const openComposer = (topic?: Topic) => {
+    if (topic) {
+      const bodyParts = [topic.title];
+      if (topic.summary) bodyParts.push("", topic.summary);
+      if (topic.link) bodyParts.push("", `原文链接：${topic.link}`);
+      bodyParts.push("", "信息整理，不构成投资建议。");
+      setDraft({
+        title: topic.title,
+        body: bodyParts.join("\n"),
+        reviewed: false,
+        queued: false,
+        publishType: "post",
+        videoSourceType: "url",
+        videoUrl: "",
+        videoFilePath: "",
+      });
+    }
+    setTab("内容工坊");
+  };
 
   /** 将抓取到的文章自动导入选题池（去重），返回实际新增条数 */
   const importArticlesToTopics = (articles: NewsArticle[]): number => {
@@ -44,6 +62,8 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
           title: article.title,
           source: `${article.sourceName}（RSS）`,
           verified: false,
+          summary: article.summary || undefined,
+          link: article.link || undefined,
         });
       }
       addedCount = newTopics.length;
@@ -58,6 +78,8 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
       title: article.title,
       source: `${article.sourceName}（RSS）`,
       verified: false,
+      summary: article.summary || undefined,
+      link: article.link || undefined,
     };
     setTopics((prev) => [newTopic, ...prev]);
     setNotice(`已将"${article.title}"加入选题池。`);
