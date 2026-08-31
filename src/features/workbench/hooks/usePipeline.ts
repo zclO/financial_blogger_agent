@@ -369,6 +369,17 @@ export function usePipeline() {
     persist(updated, null);
   }, [savedPipelines, persist]);
 
+  const closeEditor = useCallback(() => {
+    setEditingPipelineId(null);
+    setNodes([]);
+    setEdges([]);
+    setDirty(false);
+    setSelectedNodeId(null);
+    setResults([]);
+    setRunLog([]);
+    setCurrentArticle(null);
+  }, []);
+
   // ── Node CRUD ──
 
   const addNode = useCallback(
@@ -524,6 +535,7 @@ export function usePipeline() {
     deletePipeline,
     setDefaultPipeline,
     clearDefaultPipeline,
+    closeEditor,
     // Canvas state
     nodes,
     edges,

@@ -151,6 +151,7 @@ export function App() {
             onDeletePipeline={pipeline.deletePipeline}
             onSetDefaultPipeline={pipeline.setDefaultPipeline}
             onClearDefaultPipeline={pipeline.clearDefaultPipeline}
+            onCloseEditor={pipeline.closeEditor}
             running={pipeline.running}
             results={pipeline.results}
             runLog={pipeline.runLog}

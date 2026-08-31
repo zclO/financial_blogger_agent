@@ -13,6 +13,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { callLlm } from "../../../lib/tauri";
 import type {
   LlmNodeConfig,
   PipelineNode,
@@ -57,6 +58,7 @@ export function PipelinePanel({
   onDeletePipeline,
   onSetDefaultPipeline,
   onClearDefaultPipeline,
+  onCloseEditor,
   running,
   results,
   runLog,
@@ -86,6 +88,7 @@ export function PipelinePanel({
   onDeletePipeline: (id: string) => void;
   onSetDefaultPipeline: (id: string) => void;
   onClearDefaultPipeline: () => void;
+  onCloseEditor: () => void;
   running: boolean;
   results: ProcessedArticle[];
   runLog: string[];
@@ -111,6 +114,7 @@ export function PipelinePanel({
         onRemoveEdge={onRemoveEdge}
         onSavePipeline={onSavePipeline}
         onLoadPipeline={onLoadPipeline}
+        onCloseEditor={onCloseEditor}
         running={running}
         results={results}
         runLog={runLog}
@@ -358,6 +362,7 @@ function PipelineEditor({
   onRemoveEdge,
   onSavePipeline,
   onLoadPipeline,
+  onCloseEditor,
   running,
   results,
   runLog,
@@ -378,6 +383,7 @@ function PipelineEditor({
   onRemoveEdge: (edgeId: string) => void;
   onSavePipeline: () => void;
   onLoadPipeline: (id: string) => void;
+  onCloseEditor: () => void;
   running: boolean;
   results: ProcessedArticle[];
   runLog: string[];
@@ -503,7 +509,7 @@ function PipelineEditor({
         padding: "0.5rem 0", borderBottom: "1px solid #e5e7eb", marginBottom: "0.5rem",
       }}>
         <button
-          onClick={() => onLoadPipeline(editingPipeline.id)}
+          onClick={onCloseEditor}
           style={{
             background: "none", border: "1px solid #ddd", borderRadius: 6,
             padding: "4px 10px", cursor: "pointer", fontSize: 13, color: "#555",
@@ -866,6 +872,35 @@ function LlmConfigEditor({
   config: LlmNodeConfig;
   onUpdate: (nodeId: string, config: Partial<LlmNodeConfig>) => void;
 }) {
+  const [testState, setTestState] = useState<"idle" | "testing" | "success" | "error">("idle");
+  const [testMsg, setTestMsg] = useState("");
+
+  const handleTest = async () => {
+    if (!config.apiEndpoint || !config.apiKey || !config.model) {
+      setTestState("error");
+      setTestMsg("请先填写 API 端点、API Key 和模型名称。");
+      return;
+    }
+    setTestState("testing");
+    setTestMsg("");
+    try {
+      const resp = await callLlm({
+        apiEndpoint: config.apiEndpoint,
+        apiKey: config.apiKey,
+        model: config.model,
+        systemPrompt: "You are a helpful assistant.",
+        userPrompt: "Hi",
+        temperature: 0,
+        maxTokens: 10,
+      });
+      setTestState("success");
+      setTestMsg(`连通成功 · 模型: ${resp.model}${resp.usage ? ` · ${resp.usage.totalTokens} tokens` : ""}`);
+    } catch (err) {
+      setTestState("error");
+      setTestMsg(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const labelStyle = { display: "block", fontSize: 12, fontWeight: 500, color: "#555", marginBottom: 2 };
   const inputStyle = {
     width: "100%", padding: "6px 8px", border: "1px solid #ddd", borderRadius: 6,
@@ -900,6 +935,33 @@ function LlmConfigEditor({
             onChange={(e) => onUpdate(nodeId, { temperature: parseFloat(e.target.value) || 0.7 })} />
         </label>
       </div>
+
+      {/* ── Test connection ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <button
+          onClick={handleTest}
+          disabled={testState === "testing"}
+          style={{
+            padding: "6px 14px", borderRadius: 6, border: "1px solid",
+            borderColor: testState === "success" ? "#86efac" : testState === "error" ? "#fca5a5" : "#ddd",
+            background: testState === "success" ? "#f0fdf4" : testState === "error" ? "#fef2f2" : "#fff",
+            color: testState === "testing" ? "#aaa" : "#333",
+            fontSize: 12, fontWeight: 500, cursor: testState === "testing" ? "wait" : "pointer",
+            transition: "all 0.15s", whiteSpace: "nowrap",
+          }}
+        >
+          {testState === "testing" ? "⏳ 测试中…" : testState === "success" ? "✅ 已连通" : testState === "error" ? "❌ 失败" : "🔌 测试连通"}
+        </button>
+        {testMsg && (
+          <span style={{
+            fontSize: 11, lineHeight: 1.4, flex: 1,
+            color: testState === "success" ? "#16a34a" : testState === "error" ? "#dc2626" : "#888",
+          }}>
+            {testMsg}
+          </span>
+        )}
+      </div>
+
       <label>
         <span style={labelStyle}>系统提示词</span>
         <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical", fontFamily: "inherit" }}
