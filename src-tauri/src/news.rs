@@ -48,10 +48,13 @@ fn default_news_sources() -> Vec<NewsSourceDto> {
         NewsSourceDto { id: "sec".into(), name: "SEC".into(), category: "政府监管".into(), url: "https://www.sec.gov/news/pressreleases.rss".into() },
         NewsSourceDto { id: "fed".into(), name: "Federal Reserve".into(), category: "政府监管".into(), url: "https://www.federalreserve.gov/feeds/press_all.xml".into() },
         NewsSourceDto { id: "federal-register".into(), name: "Federal Register (Crypto)".into(), category: "政府监管".into(), url: "https://www.federalregister.gov/api/v1/documents.rss?conditions[term]=crypto&per_page=20".into() },
+        // Macro & Economic Data
+        NewsSourceDto { id: "fomc".into(), name: "FOMC 利率决议".into(), category: "宏观经济".into(), url: "https://www.federalreserve.gov/feeds/press_monetary.xml".into() },
+        NewsSourceDto { id: "epi".into(), name: "经济政策研究所 (EPI)".into(), category: "宏观经济".into(), url: "https://www.epi.org/feed/".into() },
+        NewsSourceDto { id: "bea".into(), name: "美国经济分析局 (BEA)".into(), category: "宏观经济".into(), url: "https://apps.bea.gov/rss/rss.xml".into() },
         // Silver & Precious Metals
-        NewsSourceDto { id: "kitco".into(), name: "Kitco".into(), category: "白银贵金属".into(), url: "https://www.kitco.com/feed/rss/".into() },
-        NewsSourceDto { id: "silver-com".into(), name: "Silver.com".into(), category: "白银贵金属".into(), url: "https://www.silver.com/news/feed/".into() },
-        NewsSourceDto { id: "mining-com".into(), name: "Mining.com".into(), category: "白银贵金属".into(), url: "https://www.mining.com/feed/".into() },
+        NewsSourceDto { id: "ahead-of-the-herd".into(), name: "Ahead of the Herd".into(), category: "白银贵金属".into(), url: "https://aheadoftheherd.com/feed/".into() },
+        NewsSourceDto { id: "mining-com".into(), name: "Mining.com".into(), category: "白银贵金属".into(), url: "https://www.mining.com/feed".into() },
     ]
 }
 
@@ -153,7 +156,9 @@ pub async fn fetch_news(
             let resp = client
                 .get(&source.url)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-                .header("Accept", "application/rss+xml, application/xml, text/xml, */*")
+                .header("Accept", "application/rss+xml, application/atom+xml, application/xml, text/xml, */*")
+                .header("Accept-Language", "en-US,en;q=0.9,zh-CN;q=0.8")
+                .header("Accept-Encoding", "gzip, deflate")
                 .send()
                 .await
                 .map_err(|e| format!("网络请求失败: {}", e))?;
