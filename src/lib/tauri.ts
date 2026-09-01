@@ -100,6 +100,20 @@ export function getDefaultNewsSources(): Promise<NewsSource[]> {
   return invoke<NewsSource[]>("get_default_news_sources");
 }
 
+// ── News Source Store ──
+
+export interface NewsSourceStoreData {
+  sources: NewsSource[];
+}
+
+export function loadNewsSourceStore(): Promise<NewsSourceStoreData> {
+  return invoke<NewsSourceStoreData>("load_news_source_store");
+}
+
+export function saveNewsSourceStore(store: NewsSourceStoreData): Promise<void> {
+  return invoke<void>("save_news_source_store", { store });
+}
+
 // ── Pipeline / LLM ──
 
 export interface LlmRequest {

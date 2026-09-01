@@ -383,6 +383,10 @@ export function App() {
             onFetchAll={() => void news.fetchAllNews()}
             onFetchSource={(source) => void news.fetchSingleSource(source)}
             onArticleToTopic={workspace.convertArticleToTopic}
+            onAddSource={news.addSource}
+            onUpdateSource={news.updateSource}
+            onRemoveSource={news.removeSource}
+            onResetSources={news.resetSources}
           />
         )}
 

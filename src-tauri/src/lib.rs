@@ -3,6 +3,7 @@ mod binance;
 mod draft_store;
 mod http;
 mod news;
+mod news_source_store;
 mod pipeline;
 mod pipeline_store;
 mod publish_queue_store;
@@ -30,6 +31,9 @@ pub fn run() {
             // news
             news::get_default_news_sources,
             news::fetch_news,
+            // news source store
+            news_source_store::load_news_source_store,
+            news_source_store::save_news_source_store,
             // pipeline
             pipeline::call_llm,
             // pipeline store

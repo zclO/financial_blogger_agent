@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { fetchNews, getDefaultNewsSources, type NewsFetchResult, type NewsSource } from "../../../lib/tauri";
+import {
+  fetchNews,
+  getDefaultNewsSources,
+  loadNewsSourceStore,
+  saveNewsSourceStore,
+  type NewsFetchResult,
+  type NewsSource,
+} from "../../../lib/tauri";
 import { DEFAULT_NEWS_SOURCES } from "../constants";
 import type { Topic } from "../types";
 
@@ -17,11 +24,73 @@ export function useNews(
   const onNewTopicsRef = useRef(onNewTopics);
   onNewTopicsRef.current = onNewTopics;
 
+  // ── Load persisted sources on mount ──
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await loadNewsSourceStore();
+        if (stored.sources.length > 0) {
+          setNewsSources(stored.sources);
+          return;
+        }
+      } catch { /* fall through */ }
+      // Fallback: try Rust-side defaults
+      try {
+        const defaults = await getDefaultNewsSources();
+        setNewsSources(defaults);
+      } catch { /* keep DEFAULT_NEWS_SOURCES */ }
+    })();
+  }, []);
+
+  // ── Persist helper ──
+  const persistSources = useCallback((sources: NewsSource[]) => {
+    setNewsSources(sources);
+    saveNewsSourceStore({ sources }).catch(() => {});
+  }, []);
+
+  // ── CRUD ──
+
+  const addSource = useCallback((source: NewsSource) => {
+    setNewsSources((prev) => {
+      const next = [...prev, source];
+      saveNewsSourceStore({ sources: next }).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const updateSource = useCallback((id: string, patch: Partial<NewsSource>) => {
+    setNewsSources((prev) => {
+      const next = prev.map((s) => (s.id === id ? { ...s, ...patch } : s));
+      saveNewsSourceStore({ sources: next }).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const removeSource = useCallback((id: string) => {
+    setNewsSources((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      saveNewsSourceStore({ sources: next }).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const resetSources = useCallback(() => {
+    (async () => {
+      try {
+        const defaults = await getDefaultNewsSources();
+        persistSources(defaults);
+      } catch {
+        persistSources(DEFAULT_NEWS_SOURCES);
+      }
+    })();
+  }, [persistSources]);
+
+  // ── Article import ──
+
   const importArticlesToTopics = (articles: { title: string; sourceName: string; summary?: string; link?: string }[]): number => {
     let addedCount = 0;
     const newTopics: Topic[] = [];
     const newTitles: string[] = [];
-    // Use persistent seenTitles for cross-session dedup
     const seen = seenTitles ?? new Set<string>();
     setTopics((prev) => {
       const existingTitles = new Set([...prev.map((t) => t.title), ...seen]);
@@ -36,21 +105,20 @@ export function useNews(
           summary: article.summary || undefined,
           link: article.link || undefined,
         });
-        newTitles.push(article.title);
       }
       addedCount = newTopics.length;
       return newTopics.length > 0 ? [...newTopics, ...prev] : prev;
     });
-    // Persist newly seen titles
     if (newTitles.length > 0) {
       addSeenTitles?.(newTitles);
     }
-    // Notify callback with newly added topics
     if (newTopics.length > 0) {
       setTimeout(() => onNewTopicsRef.current?.(newTopics), 0);
     }
     return addedCount;
   };
+
+  // ── Fetch ──
 
   const fetchAllNews = async () => {
     setNewsFetching(true);
@@ -96,17 +164,15 @@ export function useNews(
     }
   };
 
-  useEffect(() => {
-    getDefaultNewsSources()
-      .then((sources) => setNewsSources(sources))
-      .catch(() => {/* keep DEFAULT_NEWS_SOURCES */});
-  }, []);
-
   return {
     newsSources,
     newsResults,
     newsFetching,
     fetchAllNews,
     fetchSingleSource,
+    addSource,
+    updateSource,
+    removeSource,
+    resetSources,
   };
 }
