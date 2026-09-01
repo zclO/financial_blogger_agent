@@ -84,6 +84,7 @@ export function App() {
   );
 
   // ── Full auto-publish orchestration: fetch → process → queue → publish ──
+  // All mutable values accessed via refs to keep the effect dependency stable.
   const autoPublishRef = useRef(publishing.autoPublish);
   autoPublishRef.current = publishing.autoPublish;
 
@@ -102,8 +103,29 @@ export function App() {
   const addSeenTitlesRef = useRef(addSeenTitles);
   addSeenTitlesRef.current = addSeenTitles;
 
+  const addToQueueRef = useRef(publishing.addToQueue);
+  addToQueueRef.current = publishing.addToQueue;
+
+  const appendQueueLogRef = useRef(publishing.appendQueueLog);
+  appendQueueLogRef.current = publishing.appendQueueLog;
+
+  const publishEntryRef = useRef(publishing.publishEntry);
+  publishEntryRef.current = publishing.publishEntry;
+
+  const runSavedPipelineRef = useRef(pipeline.runSavedPipeline);
+  runSavedPipelineRef.current = pipeline.runSavedPipeline;
+
+  const queueEntriesRef = useRef(publishing.queueEntries);
+  queueEntriesRef.current = publishing.queueEntries;
+
+  const squareConfigRef = useRef(square.squareConfig);
+  squareConfigRef.current = square.squareConfig;
+
+  const updateAutoPublishLastRef = useRef(publishing.updateAutoPublishLast);
+  updateAutoPublishLastRef.current = publishing.updateAutoPublishLast;
+
   useEffect(() => {
-    const ap = publishing.autoPublish;
+    const ap = autoPublishRef.current;
     if (!ap.enabled || !ap.intervalMinutes || ap.intervalMinutes < 1) return;
     const intervalMs = ap.intervalMinutes * 60 * 1000;
 
@@ -122,12 +144,12 @@ export function App() {
           .flatMap((r) => r.articles);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        publishing.appendQueueLog(`自动发布抓取失败：${msg}`);
+        appendQueueLogRef.current(`自动发布抓取失败：${msg}`);
         return;
       }
 
       if (articles.length === 0) {
-        publishing.appendQueueLog("自动发布：未抓取到任何文章。");
+        appendQueueLogRef.current("自动发布：未抓取到任何文章。");
         return;
       }
 
@@ -139,87 +161,131 @@ export function App() {
       ]);
       const newArticles = articles.filter((a) => a.title && !existingTitles.has(a.title));
 
-      if (newArticles.length === 0) {
-        publishing.appendQueueLog(`自动发布：抓取到 ${articles.length} 篇文章，均为已知内容，跳过。`);
-        return;
+      if (newArticles.length > 0) {
+        // Mark new titles as seen
+        addSeenTitlesRef.current(newArticles.map((a) => a.title));
+
+        // Convert to topics
+        const newTopics: Topic[] = newArticles.map((a, i) => ({
+          id: Date.now() + i,
+          title: a.title,
+          source: `${a.sourceName}（RSS）`,
+          verified: false,
+          summary: a.summary,
+          link: a.link,
+        }));
+
+        // ── Step 3: Run pipeline ──
+        const pipelineId = currentAP.pipelineId;
+        const pl = pipelineId
+          ? savedPipelinesRef.current.find((p) => p.id === pipelineId)
+          : null;
+
+        let queuedCount = 0;
+        let processedCount = 0;
+
+        for (const topic of newTopics) {
+          if (pl) {
+            try {
+              const results = await runSavedPipelineRef.current(pl.id, topic);
+              const processed = results[0]?.processedContent;
+              if (processed && processed.length > 0) {
+                processedCount++;
+                const autoDraft: Draft = {
+                  title: topic.title,
+                  body: topic.title,
+                  reviewed: true,
+                  queued: true,
+                  publishType: "post",
+                  videoSourceType: "url",
+                  videoUrl: "",
+                  videoFilePath: "",
+                };
+                addToQueueRef.current(autoDraft, processed, [], topic.source.replace(/（RSS）$/, ""));
+                queuedCount++;
+              } else {
+                appendQueueLogRef.current(`自动发布：流水线处理「${topic.title}」无输出，跳过。`);
+              }
+            } catch {
+              appendQueueLogRef.current(`自动发布：流水线处理「${topic.title}」失败，跳过。`);
+            }
+          } else {
+            // No pipeline configured — queue raw article content
+            const autoDraft: Draft = {
+              title: topic.title,
+              body: topic.summary || topic.title,
+              reviewed: true,
+              queued: true,
+              publishType: "post",
+              videoSourceType: "url",
+              videoUrl: "",
+              videoFilePath: "",
+            };
+            addToQueueRef.current(autoDraft, topic.summary || topic.title, [], topic.source.replace(/（RSS）$/, ""));
+            queuedCount++;
+          }
+        }
+
+        const pipelineLabel = pl ? `使用流水线「${pl.name}」` : "无流水线";
+        appendQueueLogRef.current(
+          `自动发布：抓取 ${newArticles.length} 篇新文章，${pipelineLabel}处理 ${processedCount} 篇，入队 ${queuedCount} 篇。`,
+        );
+      } else {
+        appendQueueLogRef.current(`自动发布：抓取到 ${articles.length} 篇文章，均为已知内容，跳过抓取。`);
       }
 
-      // Mark new titles as seen
-      const newTitles = newArticles.map((a) => a.title);
-      addSeenTitlesRef.current(newTitles);
+      // ── Step 4: Publish from queue (round-robin by source priority) ──
+      const entries = queueEntriesRef.current;
+      const pending = entries.filter((e) => e.status === "pending");
+      if (pending.length === 0) return;
+      if (!squareConfigRef.current?.keyConfigured) return;
 
-      // Convert to topics
-      const newTopics: Topic[] = newArticles.map((a, i) => ({
-        id: Date.now() + i,
-        title: a.title,
-        source: `${a.sourceName}（RSS）`,
-        verified: false,
-        summary: a.summary,
-        link: a.link,
-      }));
+      const lastSource = currentAP.lastSourceName;
+      const priority = currentAP.sourcePriority;
 
-      // ── Step 3: Run pipeline ──
-      const pipelineId = currentAP.pipelineId;
-      const pl = pipelineId
-        ? savedPipelinesRef.current.find((p) => p.id === pipelineId)
-        : null;
+      const bySource = new Map<string, typeof pending>();
+      for (const e of pending) {
+        const src = e.sourceName || "(无来源)";
+        const list = bySource.get(src) ?? [];
+        list.push(e);
+        bySource.set(src, list);
+      }
 
-      let queuedCount = 0;
-      let processedCount = 0;
+      const availableSources = [...bySource.keys()];
+      const ordered = [
+        ...priority.filter((s) => availableSources.includes(s)),
+        ...availableSources.filter((s) => !priority.includes(s)),
+      ];
+      const lastIdx = ordered.indexOf(lastSource);
+      const rotated = lastIdx >= 0
+        ? [...ordered.slice(lastIdx + 1), ...ordered.slice(0, lastIdx + 1)]
+        : ordered;
 
-      for (const topic of newTopics) {
-        if (pl) {
-          try {
-            const results = await pipeline.runSavedPipeline(pl.id, topic);
-            const processed = results[0]?.processedContent;
-            if (processed && processed.length > 0) {
-              processedCount++;
-              const autoDraft: Draft = {
-                title: topic.title,
-                body: topic.title,
-                reviewed: true,
-                queued: true,
-                publishType: "post",
-                videoSourceType: "url",
-                videoUrl: "",
-                videoFilePath: "",
-              };
-              publishing.addToQueue(autoDraft, processed, [], topic.source.replace(/（RSS）$/, ""));
-              queuedCount++;
-            } else {
-              publishing.appendQueueLog(`自动发布：流水线处理「${topic.title}」无输出，跳过。`);
-            }
-          } catch {
-            publishing.appendQueueLog(`自动发布：流水线处理「${topic.title}」失败，跳过。`);
-          }
-        } else {
-          // No pipeline configured — queue raw article content
-          const autoDraft: Draft = {
-            title: topic.title,
-            body: topic.summary || topic.title,
-            reviewed: true,
-            queued: true,
-            publishType: "post",
-            videoSourceType: "url",
-            videoUrl: "",
-            videoFilePath: "",
-          };
-          publishing.addToQueue(autoDraft, topic.summary || topic.title, [], topic.source.replace(/（RSS）$/, ""));
-          queuedCount++;
+      let chosen: typeof pending[0] | undefined;
+      let chosenSource = "";
+      for (const src of rotated) {
+        const list = bySource.get(src);
+        if (list && list.length > 0) {
+          chosen = list[0];
+          chosenSource = src;
+          break;
         }
       }
 
-      const pipelineLabel = pl ? `使用流水线「${pl.name}」` : "无流水线";
-      publishing.appendQueueLog(
-        `自动发布：抓取 ${newArticles.length} 篇新文章，${pipelineLabel}处理 ${processedCount} 篇，入队 ${queuedCount} 篇。`,
-      );
+      if (chosen) {
+        const success = await publishEntryRef.current(chosen.id, "auto");
+        if (success) {
+          updateAutoPublishLastRef.current(chosenSource);
+        }
+      }
     };
 
     // Execute immediately on enable
     void tick();
     const timer = window.setInterval(() => void tick(), intervalMs);
     return () => window.clearInterval(timer);
-  }, [publishing.autoPublish.enabled, publishing.autoPublish.intervalMinutes, publishing.addToQueue, publishing.appendQueueLog, pipeline.runSavedPipeline]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publishing.autoPublish.enabled, publishing.autoPublish.intervalMinutes]);
 
   const handleQueue = () => {
     const error = workspace.validateDraftForQueue();

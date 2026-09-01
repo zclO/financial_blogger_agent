@@ -44,10 +44,6 @@ export function usePublishing(
   const draftRef = useRef(draft);
   draftRef.current = draft;
 
-  // Ref for autoPublish to use in interval without re-creating it
-  const autoPublishRef = useRef(autoPublish);
-  autoPublishRef.current = autoPublish;
-
   // Ref for queueEntries to use in interval
   const queueEntriesRef = useRef(queueEntries);
   queueEntriesRef.current = queueEntries;
@@ -294,76 +290,6 @@ export function usePublishing(
     return () => window.clearInterval(timer);
   }, [allowScheduledPublish, scheduleAtInput, publishEntry]);
 
-  // ── Auto-publish tick function ──
-  const autoPublishTick = useCallback(() => {
-    const entries = queueEntriesRef.current;
-    const pending = entries.filter((e) => e.status === "pending");
-    if (pending.length === 0) return;
-    if (!squareConfigRef.current?.keyConfigured) return;
-
-    // Round-robin: pick the next source based on priority and last published
-    const lastSource = autoPublishRef.current.lastSourceName;
-    const priority = autoPublishRef.current.sourcePriority;
-
-    // Group pending entries by source
-    const bySource = new Map<string, QueueEntryData[]>();
-    for (const e of pending) {
-      const src = e.sourceName || "(无来源)";
-      const list = bySource.get(src) ?? [];
-      list.push(e);
-      bySource.set(src, list);
-    }
-
-    const availableSources = [...bySource.keys()];
-    // Build ordered source list: priority first, then remaining
-    const ordered = [
-      ...priority.filter((s) => availableSources.includes(s)),
-      ...availableSources.filter((s) => !priority.includes(s)),
-    ];
-    // Rotate so that sources after lastSource come first
-    const lastIdx = ordered.indexOf(lastSource);
-    const rotated = lastIdx >= 0
-      ? [...ordered.slice(lastIdx + 1), ...ordered.slice(0, lastIdx + 1)]
-      : ordered;
-
-    // Pick the first source that has pending entries (rotated order)
-    let chosen: QueueEntryData | undefined;
-    let chosenSource = "";
-    for (const src of rotated) {
-      const list = bySource.get(src);
-      if (list && list.length > 0) {
-        // Pick the newest entry from this source (entries are newest-first)
-        chosen = list[0];
-        chosenSource = src;
-        break;
-      }
-    }
-
-    if (chosen) {
-      void publishEntry(chosen.id, "auto").then((success) => {
-        if (success) {
-          setAutoPublish((prev) => ({
-            ...prev,
-            lastSourceName: chosenSource,
-            lastTime: nowText(),
-          }));
-        }
-      });
-    }
-  }, [publishEntry]);
-
-  // ── Auto-publish timer: run immediately on enable, then at interval ──
-  useEffect(() => {
-    if (!autoPublish.enabled || !autoPublish.intervalMinutes || autoPublish.intervalMinutes < 1) return;
-    const intervalMs = autoPublish.intervalMinutes * 60 * 1000;
-
-    // Execute immediately when enabled
-    autoPublishTick();
-
-    const timer = window.setInterval(autoPublishTick, intervalMs);
-    return () => window.clearInterval(timer);
-  }, [autoPublish.enabled, autoPublish.intervalMinutes, autoPublishTick]);
-
   // ── Sync selected entry state with publishState ──
   const selectEntry = useCallback((entryId: string | null) => {
     setSelectedEntryId(entryId);
@@ -417,6 +343,14 @@ export function usePublishing(
     setAutoPublish((prev) => ({ ...prev, pipelineId }));
   }, []);
 
+  const updateAutoPublishLast = useCallback((sourceName: string) => {
+    setAutoPublish((prev) => ({
+      ...prev,
+      lastSourceName: sourceName,
+      lastTime: nowText(),
+    }));
+  }, []);
+
   return {
     queueEntries,
     selectedEntryId,
@@ -443,5 +377,6 @@ export function usePublishing(
     removeSourcePriority,
     addSourcePriority,
     setAutoPublishPipeline,
+    updateAutoPublishLast,
   };
 }
