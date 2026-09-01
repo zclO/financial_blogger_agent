@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { AutoPublishPanel } from "../features/workbench/components/AutoPublishPanel";
 import { ComposerPanel } from "../features/workbench/components/ComposerPanel";
 import { MetricCard } from "../features/workbench/components/MetricCard";
 import { NewsPanel } from "../features/workbench/components/NewsPanel";
@@ -20,8 +21,9 @@ import { usePublishing } from "../features/workbench/hooks/usePublishing";
 import { useSquare } from "../features/workbench/hooks/useSquare";
 import { useSymbolSearch } from "../features/workbench/hooks/useSymbolSearch";
 import { useWorkspace } from "../features/workbench/hooks/useWorkspace";
-import type { Tab, Topic } from "../features/workbench/types";
+import type { Tab, Topic, Draft } from "../features/workbench/types";
 import type { ArticleLogEntry } from "../lib/tauri";
+import { fetchNews } from "../lib/tauri";
 import { buildFinalBody } from "../features/workbench/utils";
 
 export function App() {
@@ -33,6 +35,7 @@ export function App() {
   const [showLogHistory, setShowLogHistory] = useState(false);
   const [selectedLogEntry, setSelectedLogEntry] = useState<ArticleLogEntry | null>(null);
   const [pendingWorkflowTopic, setPendingWorkflowTopic] = useState<Topic | null>(null);
+  const [draftSourceName, setDraftSourceName] = useState("");
 
   // ── Feature hooks ──
   const workspace = useWorkspace(setNotice, setTab);
@@ -80,13 +83,151 @@ export function App() {
     setTab,
   );
 
+  // ── Full auto-publish orchestration: fetch → process → queue → publish ──
+  const autoPublishRef = useRef(publishing.autoPublish);
+  autoPublishRef.current = publishing.autoPublish;
+
+  const newsSourcesRef = useRef(news.newsSources);
+  newsSourcesRef.current = news.newsSources;
+
+  const savedPipelinesRef = useRef(pipeline.savedPipelines);
+  savedPipelinesRef.current = pipeline.savedPipelines;
+
+  const seenTitlesRef = useRef(workspace.seenTitles);
+  seenTitlesRef.current = workspace.seenTitles;
+
+  const topicsRef = useRef(workspace.topics);
+  topicsRef.current = workspace.topics;
+
+  const addSeenTitlesRef = useRef(addSeenTitles);
+  addSeenTitlesRef.current = addSeenTitles;
+
+  useEffect(() => {
+    const ap = publishing.autoPublish;
+    if (!ap.enabled || !ap.intervalMinutes || ap.intervalMinutes < 1) return;
+    const intervalMs = ap.intervalMinutes * 60 * 1000;
+
+    const tick = async () => {
+      const currentAP = autoPublishRef.current;
+
+      // ── Step 1: Fetch news ──
+      const sources = newsSourcesRef.current;
+      if (sources.length === 0) return;
+
+      let articles: { title: string; sourceName: string; summary?: string; link?: string }[];
+      try {
+        const results = await fetchNews(sources);
+        articles = results
+          .filter((r) => !r.error)
+          .flatMap((r) => r.articles);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        publishing.appendQueueLog(`自动发布抓取失败：${msg}`);
+        return;
+      }
+
+      if (articles.length === 0) {
+        publishing.appendQueueLog("自动发布：未抓取到任何文章。");
+        return;
+      }
+
+      // ── Step 2: Deduplicate ──
+      const seen = seenTitlesRef.current;
+      const existingTitles = new Set<string>([
+        ...topicsRef.current.map((t) => t.title),
+        ...seen,
+      ]);
+      const newArticles = articles.filter((a) => a.title && !existingTitles.has(a.title));
+
+      if (newArticles.length === 0) {
+        publishing.appendQueueLog(`自动发布：抓取到 ${articles.length} 篇文章，均为已知内容，跳过。`);
+        return;
+      }
+
+      // Mark new titles as seen
+      const newTitles = newArticles.map((a) => a.title);
+      addSeenTitlesRef.current(newTitles);
+
+      // Convert to topics
+      const newTopics: Topic[] = newArticles.map((a, i) => ({
+        id: Date.now() + i,
+        title: a.title,
+        source: `${a.sourceName}（RSS）`,
+        verified: false,
+        summary: a.summary,
+        link: a.link,
+      }));
+
+      // ── Step 3: Run pipeline ──
+      const pipelineId = currentAP.pipelineId;
+      const pl = pipelineId
+        ? savedPipelinesRef.current.find((p) => p.id === pipelineId)
+        : null;
+
+      let queuedCount = 0;
+      let processedCount = 0;
+
+      for (const topic of newTopics) {
+        if (pl) {
+          try {
+            const results = await pipeline.runSavedPipeline(pl.id, topic);
+            const processed = results[0]?.processedContent;
+            if (processed && processed.length > 0) {
+              processedCount++;
+              const autoDraft: Draft = {
+                title: topic.title,
+                body: topic.title,
+                reviewed: true,
+                queued: true,
+                publishType: "post",
+                videoSourceType: "url",
+                videoUrl: "",
+                videoFilePath: "",
+              };
+              publishing.addToQueue(autoDraft, processed, [], topic.source.replace(/（RSS）$/, ""));
+              queuedCount++;
+            } else {
+              publishing.appendQueueLog(`自动发布：流水线处理「${topic.title}」无输出，跳过。`);
+            }
+          } catch {
+            publishing.appendQueueLog(`自动发布：流水线处理「${topic.title}」失败，跳过。`);
+          }
+        } else {
+          // No pipeline configured — queue raw article content
+          const autoDraft: Draft = {
+            title: topic.title,
+            body: topic.summary || topic.title,
+            reviewed: true,
+            queued: true,
+            publishType: "post",
+            videoSourceType: "url",
+            videoUrl: "",
+            videoFilePath: "",
+          };
+          publishing.addToQueue(autoDraft, topic.summary || topic.title, [], topic.source.replace(/（RSS）$/, ""));
+          queuedCount++;
+        }
+      }
+
+      const pipelineLabel = pl ? `使用流水线「${pl.name}」` : "无流水线";
+      publishing.appendQueueLog(
+        `自动发布：抓取 ${newArticles.length} 篇新文章，${pipelineLabel}处理 ${processedCount} 篇，入队 ${queuedCount} 篇。`,
+      );
+    };
+
+    // Execute immediately on enable
+    void tick();
+    const timer = window.setInterval(() => void tick(), intervalMs);
+    return () => window.clearInterval(timer);
+  }, [publishing.autoPublish.enabled, publishing.autoPublish.intervalMinutes, publishing.addToQueue, publishing.appendQueueLog, pipeline.runSavedPipeline]);
+
   const handleQueue = () => {
     const error = workspace.validateDraftForQueue();
     if (error) {
       symbols.setComposerError(error);
       return;
     }
-    publishing.addToQueue(workspace.draft, finalPublishBody, symbols.allSymbols);
+    publishing.addToQueue(workspace.draft, finalPublishBody, symbols.allSymbols, draftSourceName);
     workspace.setDraft((prev) => ({ ...prev, queued: true }));
     symbols.setComposerError("");
     publishing.setPublishState("idle");
@@ -100,6 +241,16 @@ export function App() {
     pipeline.resetExecution();
     setPendingWorkflowTopic(topic);
     setShowRunModal(true);
+  };
+
+  /** 打开编辑器时记录来源 */
+  const handleOpenComposer = (topic?: Topic) => {
+    if (topic) {
+      setDraftSourceName(topic.source.replace(/（RSS）$/, ""));
+    } else {
+      setDraftSourceName("");
+    }
+    workspace.openComposer(topic);
   };
 
   /** 在弹窗中选择流水线后执行 */
@@ -140,7 +291,7 @@ export function App() {
               topics={workspace.topics} 
               verify={workspace.verifyTopic} 
               verifyMany={workspace.verifyMany} 
-              openComposer={workspace.openComposer} 
+              openComposer={handleOpenComposer} 
               onRunWorkflow={handleRunWorkflow}
               onViewLogs={handleViewLogs}
             />
@@ -152,7 +303,7 @@ export function App() {
             topics={workspace.topics} 
             verify={workspace.verifyTopic} 
             verifyMany={workspace.verifyMany} 
-            openComposer={workspace.openComposer} 
+            openComposer={handleOpenComposer} 
             onRunWorkflow={handleRunWorkflow}
             onViewLogs={handleViewLogs}
           />
@@ -248,6 +399,25 @@ export function App() {
             }}
             publishOutput={publishing.publishOutput}
             queueLogs={publishing.queueLogs}
+          />
+        )}
+
+        {tab === "自动发布" && (
+          <AutoPublishPanel
+            autoPublish={publishing.autoPublish}
+            queueEntries={publishing.queueEntries}
+            queueLogs={publishing.queueLogs}
+            keyConfigured={square.squareConfig?.keyConfigured ?? false}
+            savedPipelines={pipeline.savedPipelines}
+            onToggle={(v) => {
+              publishing.setAutoPublishEnabled(v);
+              publishing.appendQueueLog(v ? "已开启全流程自动发布。" : "已关闭全流程自动发布。");
+            }}
+            onSetInterval={publishing.setAutoPublishInterval}
+            onSetPipeline={publishing.setAutoPublishPipeline}
+            onMoveSource={publishing.moveSourcePriority}
+            onRemoveSource={publishing.removeSourcePriority}
+            onAddSource={publishing.addSourcePriority}
           />
         )}
 

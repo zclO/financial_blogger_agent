@@ -219,6 +219,12 @@ export interface DraftStoreData {
   publishOutput: string;
   scheduleAtInput: string;
   allowScheduledPublish: boolean;
+  autoPublishEnabled: boolean;
+  autoPublishIntervalMinutes: number;
+  autoPublishLastSourceName: string;
+  autoPublishLastTime: string | null;
+  autoPublishSourcePriority: string[];
+  autoPublishPipelineId: string | null;
 }
 
 export function loadDraftStore(): Promise<DraftStoreData> {
@@ -264,6 +270,7 @@ export interface QueueEntryData {
   videoUrl: string;
   videoFilePath: string;
   symbols: string[];
+  sourceName: string;
   status: string;
   createdAt: string;
   sentAt: string | null;

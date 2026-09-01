@@ -26,6 +26,12 @@ pub struct DraftStore {
     pub publish_output: String,
     pub schedule_at_input: String,
     pub allow_scheduled_publish: bool,
+    pub auto_publish_enabled: bool,
+    pub auto_publish_interval_minutes: u32,
+    pub auto_publish_last_source_name: String,
+    pub auto_publish_last_time: Option<String>,
+    pub auto_publish_source_priority: Vec<String>,
+    pub auto_publish_pipeline_id: String,
 }
 
 // ── File path ──

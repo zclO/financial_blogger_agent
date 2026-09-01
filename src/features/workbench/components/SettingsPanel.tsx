@@ -43,8 +43,7 @@ export function SettingsPanel({
 }) {
   return (
     <section className="panel settings">
-      <h2>数据源与自动化策略</h2>
-      <p>自动发布：关闭。仅在授权、溯源、风险检查通过后，才可按策略自动发布。</p>
+      <h2>数据源与接口配置</h2>
       <p>密钥仅通过 Rust 侧安全存储，前端不保存 Token 或 Cookie。</p>
 
       <div className="setting-grid">

@@ -16,6 +16,7 @@ pub struct QueueEntry {
     pub video_url: String,
     pub video_file_path: String,
     pub symbols: Vec<String>,
+    pub source_name: String,
     pub status: String,
     pub created_at: String,
     pub sent_at: Option<String>,

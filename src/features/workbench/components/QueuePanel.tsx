@@ -132,6 +132,7 @@ export function QueuePanel({
             </div>
             <div className="queue-item-meta">
               <span className="queue-item-type">{publishTypeLabel(entry.publishType)}</span>
+              {entry.sourceName && <span className="queue-item-source">{entry.sourceName}</span>}
               <span className="queue-item-time">{entry.createdAt}</span>
               {entry.symbols.length > 0 && (
                 <span className="queue-item-symbols">
@@ -158,6 +159,12 @@ export function QueuePanel({
             <span className="key">内容类型</span>
             <span className="value">{publishTypeLabel(selectedEntry.publishType)}</span>
           </div>
+          {selectedEntry.sourceName && (
+            <div className="kv">
+              <span className="key">新闻来源</span>
+              <span className="value">{selectedEntry.sourceName}</span>
+            </div>
+          )}
           {selectedEntry.publishType === "video" && selectedEntry.videoSourceType === "url" && (
             <div className="kv">
               <span className="key">视频链接</span>

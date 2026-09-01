@@ -1,6 +1,6 @@
 import type { Tab, Topic, NewsSource, PipelineNode } from "./types";
 
-export const TABS: Tab[] = ["仪表盘", "选题池", "新闻源", "流水线", "内容工坊", "发布队列", "设置"];
+export const TABS: Tab[] = ["仪表盘", "选题池", "新闻源", "流水线", "内容工坊", "发布队列", "自动发布", "设置"];
 
 export const DEFAULT_TOPICS: Topic[] = [
   { id: 1, title: "以太坊生态升级官方公告", source: "项目官方 API（示例）", verified: true },

@@ -10,8 +10,17 @@ import {
   type BinanceSquareConfig,
   type QueueEntryData,
 } from "../../../lib/tauri";
-import type { Draft, PublishState, QueueEntryStatus } from "../types";
+import type { AutoPublishConfig, Draft, PublishState, QueueEntryStatus } from "../types";
 import { nowText } from "../utils";
+
+const DEFAULT_AUTO_PUBLISH: AutoPublishConfig = {
+  enabled: false,
+  intervalMinutes: 30,
+  lastSourceName: "",
+  lastTime: null,
+  sourcePriority: [],
+  pipelineId: null,
+};
 
 export function usePublishing(
   draft: Draft,
@@ -29,10 +38,23 @@ export function usePublishing(
   const [publishState, setPublishState] = useState<PublishState>("idle");
   const [publishOutput, setPublishOutput] = useState("");
   const [queueLogs, setQueueLogs] = useState<string[]>([]);
+  const [autoPublish, setAutoPublish] = useState<AutoPublishConfig>(DEFAULT_AUTO_PUBLISH);
   const [loaded, setLoaded] = useState(false);
 
   const draftRef = useRef(draft);
   draftRef.current = draft;
+
+  // Ref for autoPublish to use in interval without re-creating it
+  const autoPublishRef = useRef(autoPublish);
+  autoPublishRef.current = autoPublish;
+
+  // Ref for queueEntries to use in interval
+  const queueEntriesRef = useRef(queueEntries);
+  queueEntriesRef.current = queueEntries;
+
+  // Ref for squareConfig to use in interval
+  const squareConfigRef = useRef(squareConfig);
+  squareConfigRef.current = squareConfig;
 
   // ── Load from persistence on mount ──
   useEffect(() => {
@@ -56,8 +78,16 @@ export function usePublishing(
         setScheduleAtInput(draftStore.scheduleAtInput);
         setAllowScheduledPublish(draftStore.allowScheduledPublish);
 
+        setAutoPublish({
+          enabled: draftStore.autoPublishEnabled ?? false,
+          intervalMinutes: draftStore.autoPublishIntervalMinutes || 30,
+          lastSourceName: draftStore.autoPublishLastSourceName ?? "",
+          lastTime: draftStore.autoPublishLastTime ?? null,
+          sourcePriority: draftStore.autoPublishSourcePriority ?? [],
+          pipelineId: draftStore.autoPublishPipelineId ?? null,
+        });
+
         setQueueEntries(queueStore.entries);
-        // Auto-select the first pending entry, or the first entry
         if (queueStore.entries.length > 0) {
           const pending = queueStore.entries.find((e) => e.status === "pending" || e.status === "scheduled");
           setSelectedEntryId(pending?.id ?? queueStore.entries[0].id);
@@ -88,12 +118,18 @@ export function usePublishing(
           publishOutput,
           scheduleAtInput,
           allowScheduledPublish,
+          autoPublishEnabled: autoPublish.enabled,
+          autoPublishIntervalMinutes: autoPublish.intervalMinutes,
+          autoPublishLastSourceName: autoPublish.lastSourceName,
+          autoPublishLastTime: autoPublish.lastTime,
+          autoPublishSourcePriority: autoPublish.sourcePriority,
+          autoPublishPipelineId: autoPublish.pipelineId,
         }),
         savePublishQueue({ entries: queueEntries }),
       ]).catch((err) => console.error("Failed to save:", err));
     }, 800);
     return () => clearTimeout(timer);
-  }, [queueEntries, queueLogs, publishState, publishOutput, scheduleAtInput, allowScheduledPublish, loaded]);
+  }, [queueEntries, queueLogs, publishState, publishOutput, scheduleAtInput, allowScheduledPublish, autoPublish, loaded]);
 
   const appendQueueLog = useCallback((content: string) => {
     setQueueLogs((prev) => [`[${nowText()}] ${content}`, ...prev].slice(0, 50));
@@ -118,6 +154,7 @@ export function usePublishing(
     draftData: Draft,
     finalBody: string,
     symbols: string[],
+    sourceName: string = "",
   ): string | null => {
     const entryId = `qe-${Date.now()}`;
     const newEntry: QueueEntryData = {
@@ -130,6 +167,7 @@ export function usePublishing(
       videoUrl: draftData.videoUrl,
       videoFilePath: draftData.videoFilePath,
       symbols,
+      sourceName,
       status: "pending",
       createdAt: nowText(),
       sentAt: null,
@@ -137,30 +175,31 @@ export function usePublishing(
     };
     setQueueEntries((prev) => [newEntry, ...prev]);
     setSelectedEntryId(entryId);
-    appendQueueLog(`新稿件加入队列：${draftData.title || "(无标题)"}；类型：${draftData.publishType}；标签：${symbols.join(", ")}`);
+    appendQueueLog(`新稿件加入队列：${draftData.title || "(无标题)"}；来源：${sourceName || "未知"}；类型：${draftData.publishType}；标签：${symbols.join(", ")}`);
     return null;
   }, [appendQueueLog]);
 
   // ── Publish a specific queue entry ──
-  const publishEntry = useCallback(async (entryId: string, trigger: "manual" | "scheduled") => {
-    const entry = queueEntries.find((e) => e.id === entryId);
+  const publishEntry = useCallback(async (entryId: string, trigger: "manual" | "scheduled" | "auto") => {
+    const entry = queueEntriesRef.current.find((e) => e.id === entryId);
     if (!entry) {
       setNotice("未找到该队列条目。");
-      return;
+      return false;
     }
     if (entry.status === "sent") {
       setNotice("该稿件已发送。");
-      return;
+      return false;
     }
-    if (!squareConfig?.keyConfigured) {
+    if (!squareConfigRef.current?.keyConfigured) {
       setNotice("Square OpenAPI Key 未配置，无法发送。");
-      return;
+      return false;
     }
 
     updateEntryStatus(entryId, "sending");
     setPublishState("sending");
     setPublishOutput("");
-    appendEntryLog(entryId, trigger === "scheduled" ? "定时任务开始执行发送..." : "开始手动发送...");
+    const triggerLabel = trigger === "auto" ? "自动发布" : trigger === "scheduled" ? "定时任务" : "手动";
+    appendEntryLog(entryId, `${triggerLabel}开始执行发送...`);
 
     try {
       const result =
@@ -180,24 +219,25 @@ export function usePublishing(
       setPublishOutput(result.trim());
       setPublishState("sent");
       updateEntryStatus(entryId, "sent", { sentAt: nowText() });
-      appendEntryLog(entryId, trigger === "scheduled" ? "定时发送成功。" : "手动发送成功。");
-      appendQueueLog(trigger === "scheduled" ? `定时发送成功：${entry.title || "(无标题)"}` : `手动发送成功：${entry.title || "(无标题)"}`);
+      appendEntryLog(entryId, `${triggerLabel}发送成功。`);
+      appendQueueLog(`${triggerLabel}成功：${entry.title || "(无标题)"}`);
       setNotice("发送成功。");
 
-      // If this was the current draft, clear the queued state
       if (draftRef.current.queued && draftRef.current.title === entry.title) {
         setDraft((prev) => ({ ...prev, queued: false }));
       }
+      return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setPublishOutput(message);
       setPublishState("failed");
       updateEntryStatus(entryId, "failed");
-      appendEntryLog(entryId, trigger === "scheduled" ? `定时发送失败：${message}` : `手动发送失败：${message}`);
-      appendQueueLog(trigger === "scheduled" ? `定时发送失败：${entry.title || "(无标题)"}：${message}` : `手动发送失败：${entry.title || "(无标题)"}：${message}`);
+      appendEntryLog(entryId, `${triggerLabel}失败：${message}`);
+      appendQueueLog(`${triggerLabel}失败：${entry.title || "(无标题)"}：${message}`);
       setNotice("发送失败，请查看日志并重试。");
+      return false;
     }
-  }, [queueEntries, squareConfig, updateEntryStatus, appendEntryLog, appendQueueLog, setNotice, setDraft]);
+  }, [updateEntryStatus, appendEntryLog, appendQueueLog, setNotice, setDraft]);
 
   // ── Schedule a specific queue entry ──
   const scheduleEntry = useCallback((entryId: string) => {
@@ -245,15 +285,84 @@ export function usePublishing(
       if (!scheduleAtInput) return;
       if (Date.now() >= new Date(scheduleAtInput).getTime()) {
         window.clearInterval(timer);
-        // Find the scheduled entry and publish it
-        const scheduledEntry = queueEntries.find((e) => e.status === "scheduled");
+        const scheduledEntry = queueEntriesRef.current.find((e) => e.status === "scheduled");
         if (scheduledEntry) {
           void publishEntry(scheduledEntry.id, "scheduled");
         }
       }
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [allowScheduledPublish, scheduleAtInput, queueEntries, publishEntry]);
+  }, [allowScheduledPublish, scheduleAtInput, publishEntry]);
+
+  // ── Auto-publish tick function ──
+  const autoPublishTick = useCallback(() => {
+    const entries = queueEntriesRef.current;
+    const pending = entries.filter((e) => e.status === "pending");
+    if (pending.length === 0) return;
+    if (!squareConfigRef.current?.keyConfigured) return;
+
+    // Round-robin: pick the next source based on priority and last published
+    const lastSource = autoPublishRef.current.lastSourceName;
+    const priority = autoPublishRef.current.sourcePriority;
+
+    // Group pending entries by source
+    const bySource = new Map<string, QueueEntryData[]>();
+    for (const e of pending) {
+      const src = e.sourceName || "(无来源)";
+      const list = bySource.get(src) ?? [];
+      list.push(e);
+      bySource.set(src, list);
+    }
+
+    const availableSources = [...bySource.keys()];
+    // Build ordered source list: priority first, then remaining
+    const ordered = [
+      ...priority.filter((s) => availableSources.includes(s)),
+      ...availableSources.filter((s) => !priority.includes(s)),
+    ];
+    // Rotate so that sources after lastSource come first
+    const lastIdx = ordered.indexOf(lastSource);
+    const rotated = lastIdx >= 0
+      ? [...ordered.slice(lastIdx + 1), ...ordered.slice(0, lastIdx + 1)]
+      : ordered;
+
+    // Pick the first source that has pending entries (rotated order)
+    let chosen: QueueEntryData | undefined;
+    let chosenSource = "";
+    for (const src of rotated) {
+      const list = bySource.get(src);
+      if (list && list.length > 0) {
+        // Pick the newest entry from this source (entries are newest-first)
+        chosen = list[0];
+        chosenSource = src;
+        break;
+      }
+    }
+
+    if (chosen) {
+      void publishEntry(chosen.id, "auto").then((success) => {
+        if (success) {
+          setAutoPublish((prev) => ({
+            ...prev,
+            lastSourceName: chosenSource,
+            lastTime: nowText(),
+          }));
+        }
+      });
+    }
+  }, [publishEntry]);
+
+  // ── Auto-publish timer: run immediately on enable, then at interval ──
+  useEffect(() => {
+    if (!autoPublish.enabled || !autoPublish.intervalMinutes || autoPublish.intervalMinutes < 1) return;
+    const intervalMs = autoPublish.intervalMinutes * 60 * 1000;
+
+    // Execute immediately when enabled
+    autoPublishTick();
+
+    const timer = window.setInterval(autoPublishTick, intervalMs);
+    return () => window.clearInterval(timer);
+  }, [autoPublish.enabled, autoPublish.intervalMinutes, autoPublishTick]);
 
   // ── Sync selected entry state with publishState ──
   const selectEntry = useCallback((entryId: string | null) => {
@@ -266,6 +375,47 @@ export function usePublishing(
       }
     }
   }, [queueEntries]);
+
+  // ── Auto-publish config setters ──
+  const setAutoPublishEnabled = useCallback((enabled: boolean) => {
+    setAutoPublish((prev) => ({ ...prev, enabled }));
+  }, []);
+
+  const setAutoPublishInterval = useCallback((intervalMinutes: number) => {
+    setAutoPublish((prev) => ({ ...prev, intervalMinutes: Math.max(1, intervalMinutes) }));
+  }, []);
+
+  const setSourcePriority = useCallback((sourcePriority: string[]) => {
+    setAutoPublish((prev) => ({ ...prev, sourcePriority }));
+  }, []);
+
+  const moveSourcePriority = useCallback((index: number, direction: -1 | 1) => {
+    setAutoPublish((prev) => {
+      const list = [...prev.sourcePriority];
+      const target = index + direction;
+      if (target < 0 || target >= list.length) return prev;
+      [list[index], list[target]] = [list[target], list[index]];
+      return { ...prev, sourcePriority: list };
+    });
+  }, []);
+
+  const removeSourcePriority = useCallback((sourceName: string) => {
+    setAutoPublish((prev) => ({
+      ...prev,
+      sourcePriority: prev.sourcePriority.filter((s) => s !== sourceName),
+    }));
+  }, []);
+
+  const addSourcePriority = useCallback((sourceName: string) => {
+    setAutoPublish((prev) => {
+      if (prev.sourcePriority.includes(sourceName)) return prev;
+      return { ...prev, sourcePriority: [...prev.sourcePriority, sourceName] };
+    });
+  }, []);
+
+  const setAutoPublishPipeline = useCallback((pipelineId: string | null) => {
+    setAutoPublish((prev) => ({ ...prev, pipelineId }));
+  }, []);
 
   return {
     queueEntries,
@@ -285,5 +435,13 @@ export function usePublishing(
     publishEntry,
     scheduleEntry,
     cancelScheduleEntry,
+    autoPublish,
+    setAutoPublishEnabled,
+    setAutoPublishInterval,
+    setSourcePriority,
+    moveSourcePriority,
+    removeSourcePriority,
+    addSourcePriority,
+    setAutoPublishPipeline,
   };
 }

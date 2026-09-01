@@ -4,12 +4,21 @@ import type {
   BinanceSymbolSearchItem,
 } from "../../lib/tauri";
 
-export type Tab = "仪表盘" | "选题池" | "新闻源" | "流水线" | "内容工坊" | "发布队列" | "设置";
+export type Tab = "仪表盘" | "选题池" | "新闻源" | "流水线" | "内容工坊" | "发布队列" | "自动发布" | "设置";
 export type PublishType = "post" | "article" | "video";
 export type VideoSourceType = "url" | "local";
 export type PublishState = "idle" | "scheduled" | "sending" | "sent" | "failed";
 export type QueueFilter = "all" | "unsent" | "sent";
 export type QueueEntryStatus = "pending" | "scheduled" | "sending" | "sent" | "failed";
+
+export type AutoPublishConfig = {
+  enabled: boolean;
+  intervalMinutes: number;
+  lastSourceName: string;
+  lastTime: string | null;
+  sourcePriority: string[];
+  pipelineId: string | null;
+};
 
 export type Topic = { id: number; title: string; source: string; verified: boolean; summary?: string; link?: string; processedContent?: string };
 
