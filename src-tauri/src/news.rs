@@ -48,6 +48,10 @@ fn default_news_sources() -> Vec<NewsSourceDto> {
         NewsSourceDto { id: "sec".into(), name: "SEC".into(), category: "政府监管".into(), url: "https://www.sec.gov/news/pressreleases.rss".into() },
         NewsSourceDto { id: "fed".into(), name: "Federal Reserve".into(), category: "政府监管".into(), url: "https://www.federalreserve.gov/feeds/press_all.xml".into() },
         NewsSourceDto { id: "federal-register".into(), name: "Federal Register (Crypto)".into(), category: "政府监管".into(), url: "https://www.federalregister.gov/api/v1/documents.rss?conditions[term]=crypto&per_page=20".into() },
+        // Silver & Precious Metals
+        NewsSourceDto { id: "kitco".into(), name: "Kitco".into(), category: "白银贵金属".into(), url: "https://www.kitco.com/feed/rss/".into() },
+        NewsSourceDto { id: "silver-com".into(), name: "Silver.com".into(), category: "白银贵金属".into(), url: "https://www.silver.com/news/feed/".into() },
+        NewsSourceDto { id: "mining-com".into(), name: "Mining.com".into(), category: "白银贵金属".into(), url: "https://www.mining.com/feed/".into() },
     ]
 }
 

@@ -21,6 +21,10 @@ export const DEFAULT_NEWS_SOURCES: NewsSource[] = [
   { id: "sec", name: "SEC", category: "政府监管", url: "https://www.sec.gov/news/pressreleases.rss" },
   { id: "fed", name: "Federal Reserve", category: "政府监管", url: "https://www.federalreserve.gov/feeds/press_all.xml" },
   { id: "federal-register", name: "Federal Register (Crypto)", category: "政府监管", url: "https://www.federalregister.gov/api/v1/documents.rss?conditions[term]=crypto&per_page=20" },
+  // Silver & Precious Metals
+  { id: "kitco", name: "Kitco", category: "白银贵金属", url: "https://www.kitco.com/feed/rss/" },
+  { id: "silver-com", name: "Silver.com", category: "白银贵金属", url: "https://www.silver.com/news/feed/" },
+  { id: "mining-com", name: "Mining.com", category: "白银贵金属", url: "https://www.mining.com/feed/" },
 ];
 
 // ── Pipeline defaults ──
