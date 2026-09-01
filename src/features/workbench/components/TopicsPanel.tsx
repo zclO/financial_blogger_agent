@@ -65,36 +65,41 @@ export function TopicsPanel({
         <small style={{ color: "#888" }}>没有匹配"{keyword}"的选题。</small>
       )}
 
-      {filtered.map((x) => (
-        <div className="row" key={x.id}>
-          <div>
-            <b>{x.title}</b>
-            <small>
-              {x.source} · {x.verified ? "已核验" : "待核验"}
-              {x.processedContent && (
-                <span style={{ color: "#059669", marginLeft: "0.5rem" }} title="已通过流水线加工">
-                  ✨ 已加工
+      <div style={{ marginTop: "0.5rem" }}>
+        {filtered.map((x) => (
+          <div className="topic-row" key={x.id}>
+            <div className="topic-row-info">
+              <b>{x.title}</b>
+              <small>
+                <span className={`topic-verified-badge ${x.verified ? "verified" : "unverified"}`}>
+                  {x.verified ? "✓ 已核验" : "待核验"}
                 </span>
+                {x.source}
+                {x.processedContent && (
+                  <span style={{ color: "#059669", marginLeft: "0.5rem" }} title="已通过流水线加工">
+                    ✨ 已加工
+                  </span>
+                )}
+              </small>
+            </div>
+            <div className="topic-row-actions">
+              {x.verified ? (
+                <>
+                  <button className="btn-edit" onClick={() => openComposer(x)}>编辑草稿</button>
+                  <button className="btn-workflow" onClick={() => onRunWorkflow(x)} title="用工作流加工此文章">
+                    ▶ 工作流
+                  </button>
+                  <button className="btn-logs" onClick={() => onViewLogs(x)} title="查看运行日志">
+                    📜
+                  </button>
+                </>
+              ) : (
+                <button className="btn-verify" onClick={() => verify(x.id)}>标为已核验</button>
               )}
-            </small>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: "0.25rem" }}>
-            {x.verified ? (
-              <>
-                <button onClick={() => openComposer(x)}>编辑草稿</button>
-                <button onClick={() => onRunWorkflow(x)} title="用工作流加工此文章">
-                  ▶ 工作流
-                </button>
-                <button onClick={() => onViewLogs(x)} title="查看运行日志" style={{ background: "#f5f5f5", borderColor: "#ddd", color: "#666" }}>
-                  📜
-                </button>
-              </>
-            ) : (
-              <button onClick={() => verify(x.id)}>标为已核验</button>
-            )}
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </section>
   );
 }
