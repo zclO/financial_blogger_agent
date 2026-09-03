@@ -224,6 +224,7 @@ export interface StoredDraft {
   videoSourceType: string;
   videoUrl: string;
   videoFilePath: string;
+  targetPlatforms: string[];
 }
 
 export interface DraftStoreData {
@@ -239,6 +240,7 @@ export interface DraftStoreData {
   autoPublishLastTime: string | null;
   autoPublishSourcePriority: string[];
   autoPublishPipelineId: string | null;
+  autoPublishTargetPlatforms: string[] | null;
 }
 
 export function loadDraftStore(): Promise<DraftStoreData> {
@@ -289,6 +291,8 @@ export interface QueueEntryData {
   createdAt: string;
   sentAt: string | null;
   logs: string[];
+  targetPlatforms: string[];
+  platformResults: PublishResultItem[];
 }
 
 export interface PublishQueueStoreData {
@@ -301,4 +305,53 @@ export function loadPublishQueue(): Promise<PublishQueueStoreData> {
 
 export function savePublishQueue(store: PublishQueueStoreData): Promise<void> {
   return invoke<void>("save_publish_queue", { store });
+}
+
+// ── Multi-Platform Publishing ──
+
+export type PlatformId = "binance_square" | "x_twitter";
+
+export interface PlatformConfig {
+  platform: PlatformId;
+  enabled: boolean;
+  credentials: Record<string, string>;
+}
+
+export interface PublishRequest {
+  title?: string;
+  text: string;
+  contentType: string;
+  videoUrl?: string;
+  videoPath?: string;
+}
+
+export interface PublishResultItem {
+  platform: string;
+  success: boolean;
+  message: string;
+}
+
+export function publishToPlatforms(
+  request: PublishRequest,
+  platforms: string[],
+): Promise<PublishResultItem[]> {
+  return invoke<PublishResultItem[]>("publish_to_platforms", { request, platforms });
+}
+
+export function getPlatformConfigs(): Promise<PlatformConfig[]> {
+  return invoke<PlatformConfig[]>("get_platform_configs");
+}
+
+export function configurePlatform(
+  platform: string,
+  credentials: Record<string, string>,
+): Promise<string> {
+  return invoke<string>("configure_platform", { platform, credentials });
+}
+
+export function setPlatformEnabled(
+  platform: string,
+  enabled: boolean,
+): Promise<string> {
+  return invoke<string>("set_platform_enabled", { platform, enabled });
 }

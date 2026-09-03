@@ -15,6 +15,8 @@ pub struct StoredDraft {
     pub video_source_type: String,
     pub video_url: String,
     pub video_file_path: String,
+    #[serde(default)]
+    pub target_platforms: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -32,6 +34,8 @@ pub struct DraftStore {
     pub auto_publish_last_time: Option<String>,
     pub auto_publish_source_priority: Vec<String>,
     pub auto_publish_pipeline_id: String,
+    #[serde(default)]
+    pub auto_publish_target_platforms: Vec<String>,
 }
 
 // ── File path ──

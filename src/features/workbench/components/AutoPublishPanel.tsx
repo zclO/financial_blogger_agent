@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import type { QueueEntryData } from "../../../lib/tauri";
+import type { QueueEntryData, PlatformConfig, PlatformId } from "../../../lib/tauri";
 import type { AutoPublishConfig, SavedPipeline } from "../types";
 
 function statusLabel(status: string): string {
@@ -29,24 +29,28 @@ export function AutoPublishPanel({
   queueLogs,
   keyConfigured,
   savedPipelines,
+  platformConfigs,
   onToggle,
   onSetInterval,
   onSetPipeline,
   onMoveSource,
   onRemoveSource,
   onAddSource,
+  onSetTargetPlatforms,
 }: {
   autoPublish: AutoPublishConfig;
   queueEntries: QueueEntryData[];
   queueLogs: string[];
   keyConfigured: boolean;
   savedPipelines: SavedPipeline[];
+  platformConfigs: PlatformConfig[];
   onToggle: (v: boolean) => void;
   onSetInterval: (minutes: number) => void;
   onSetPipeline: (pipelineId: string | null) => void;
   onMoveSource: (index: number, direction: -1 | 1) => void;
   onRemoveSource: (sourceName: string) => void;
   onAddSource: (sourceName: string) => void;
+  onSetTargetPlatforms: (platforms: PlatformId[]) => void;
 }) {
   // ── Derived stats ──
   const stats = useMemo(() => {
@@ -150,6 +154,49 @@ export function AutoPublishPanel({
         <div className="subnotice warning">
           Square OpenAPI Key 尚未配置，自动发布无法执行。请前往"设置"页面配置。
         </div>
+      )}
+
+      <hr />
+
+      {/* ── Target platforms for auto-publish ── */}
+      <h3>自动发布同步平台</h3>
+      <p className="hint">
+        自动发布时，内容将同步发送到以下平台。未配置凭证的平台无法选择。
+      </p>
+      <div className="platform-selector">
+        <label className="platform-option">
+          <input
+            type="checkbox"
+            checked={autoPublish.targetPlatforms.includes("binance_square")}
+            disabled={!keyConfigured}
+            onChange={(e) => {
+              const next = e.target.checked
+                ? [...autoPublish.targetPlatforms, "binance_square"]
+                : autoPublish.targetPlatforms.filter((p) => p !== "binance_square");
+              onSetTargetPlatforms(next as PlatformId[]);
+            }}
+          />
+          Binance Square
+          {!keyConfigured && <em className="hint"> 未配置</em>}
+        </label>
+        <label className="platform-option">
+          <input
+            type="checkbox"
+            checked={autoPublish.targetPlatforms.includes("x_twitter")}
+            disabled={!isPlatformConfigured(platformConfigs, "x_twitter")}
+            onChange={(e) => {
+              const next = e.target.checked
+                ? [...autoPublish.targetPlatforms, "x_twitter"]
+                : autoPublish.targetPlatforms.filter((p) => p !== "x_twitter");
+              onSetTargetPlatforms(next as PlatformId[]);
+            }}
+          />
+          X (Twitter)
+          {!isPlatformConfigured(platformConfigs, "x_twitter") && <em className="hint"> 未配置</em>}
+        </label>
+      </div>
+      {autoPublish.targetPlatforms.length === 0 && (
+        <p className="hint warning">请至少选择一个自动发布平台。</p>
       )}
 
       <hr />
@@ -303,4 +350,12 @@ export function AutoPublishPanel({
       </div>
     </section>
   );
+}
+
+function isPlatformConfigured(configs: PlatformConfig[], platformId: PlatformId): boolean {
+  const p = configs.find((c) => c.platform === platformId);
+  if (!p) return false;
+  if (!p.enabled) return false;
+  const keys = Object.keys(p.credentials);
+  return keys.length > 0 && keys.some((k) => p.credentials[k] !== "");
 }

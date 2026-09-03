@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 use tauri::{AppHandle, Manager};
 
+use crate::publisher::PublishResult;
+
 // ── Types ──
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -21,6 +23,10 @@ pub struct QueueEntry {
     pub created_at: String,
     pub sent_at: Option<String>,
     pub logs: Vec<String>,
+    #[serde(default)]
+    pub target_platforms: Vec<String>,
+    #[serde(default)]
+    pub platform_results: Vec<PublishResult>,
 }
 
 #[derive(Serialize, Deserialize, Default)]

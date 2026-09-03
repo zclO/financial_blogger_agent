@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 
-import type { QueueEntryData } from "../../../lib/tauri";
+import type { QueueEntryData, PublishResultItem } from "../../../lib/tauri";
 import type { PublishState, QueueFilter } from "../types";
 
 const FILTER_LABELS: { key: QueueFilter; label: string }[] = [
@@ -133,6 +133,13 @@ export function QueuePanel({
             <div className="queue-item-meta">
               <span className="queue-item-type">{publishTypeLabel(entry.publishType)}</span>
               {entry.sourceName && <span className="queue-item-source">{entry.sourceName}</span>}
+              {entry.targetPlatforms && entry.targetPlatforms.length > 0 && (
+                <span className="queue-item-platforms">
+                  {entry.targetPlatforms.map((p) => (
+                    <span key={p} className="platform-badge">{platformShortName(p)}</span>
+                  ))}
+                </span>
+              )}
               <span className="queue-item-time">{entry.createdAt}</span>
               {entry.symbols.length > 0 && (
                 <span className="queue-item-symbols">
@@ -175,6 +182,26 @@ export function QueuePanel({
             <div className="kv">
               <span className="key">本地视频文件</span>
               <span className="value">{selectedEntry.videoFilePath}</span>
+            </div>
+          )}
+          <div className="kv">
+            <span className="key">目标平台</span>
+            <span className="value">
+              {selectedEntry.targetPlatforms?.length > 0
+                ? selectedEntry.targetPlatforms.map(platformShortName).join(", ")
+                : "Binance Square"}
+            </span>
+          </div>
+          {selectedEntry.platformResults && selectedEntry.platformResults.length > 0 && (
+            <div className="platform-results">
+              <h4>平台发送结果</h4>
+              {selectedEntry.platformResults.map((r) => (
+                <div key={r.platform} className={`platform-result-row ${r.success ? "ok" : "err"}`}>
+                  <span className="platform-name">{platformShortName(r.platform)}</span>
+                  <span className="platform-status">{r.success ? "✓ 成功" : "✗ 失败"}</span>
+                  <span className="platform-msg">{r.message}</span>
+                </div>
+              ))}
             </div>
           )}
           <div className="kv">
@@ -261,4 +288,12 @@ export function QueuePanel({
       </div>
     </section>
   );
+}
+
+function platformShortName(platformId: string): string {
+  switch (platformId) {
+    case "binance_square": return "Square";
+    case "x_twitter": return "X";
+    default: return platformId;
+  }
 }

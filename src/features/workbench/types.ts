@@ -2,6 +2,7 @@ import type {
   BinanceSquareConfig,
   BinanceSquareProxyConfig,
   BinanceSymbolSearchItem,
+  PlatformId,
 } from "../../lib/tauri";
 
 export type Tab = "仪表盘" | "选题池" | "新闻源" | "流水线" | "内容工坊" | "发布队列" | "自动发布" | "设置";
@@ -18,6 +19,7 @@ export type AutoPublishConfig = {
   lastTime: string | null;
   sourcePriority: string[];
   pipelineId: string | null;
+  targetPlatforms: PlatformId[];
 };
 
 export type Topic = { id: number; title: string; source: string; verified: boolean; summary?: string; link?: string; processedContent?: string };
@@ -31,6 +33,7 @@ export type Draft = {
   videoSourceType: VideoSourceType;
   videoUrl: string;
   videoFilePath: string;
+  targetPlatforms: PlatformId[];
 };
 
 export type SquareState = {

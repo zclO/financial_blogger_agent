@@ -1,7 +1,7 @@
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState } from "react";
 
-import { loadTopicStore, saveTopicStore } from "../../../lib/tauri";
+import { loadTopicStore, saveTopicStore, type PlatformId } from "../../../lib/tauri";
 import { DEFAULT_DRAFT_BODY, DEFAULT_TOPICS } from "../constants";
 import type { Draft, NewsArticle, Tab, Topic } from "../types";
 
@@ -43,6 +43,7 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
     videoSourceType: "url",
     videoUrl: "",
     videoFilePath: "",
+    targetPlatforms: ["binance_square"] as PlatformId[],
   });
 
   const verifiedCount = useMemo(() => topics.filter((x) => x.verified).length, [topics]);
@@ -77,6 +78,7 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
         videoSourceType: "url",
         videoUrl: "",
         videoFilePath: "",
+        targetPlatforms: ["binance_square"] as PlatformId[],
       });
     }
     setTab("内容工坊");

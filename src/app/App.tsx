@@ -17,6 +17,7 @@ import {
 import { TABS } from "../features/workbench/constants";
 import { useNews } from "../features/workbench/hooks/useNews";
 import { usePipeline } from "../features/workbench/hooks/usePipeline";
+import { usePlatforms } from "../features/workbench/hooks/usePlatforms";
 import { usePublishing } from "../features/workbench/hooks/usePublishing";
 import { useSquare } from "../features/workbench/hooks/useSquare";
 import { useSymbolSearch } from "../features/workbench/hooks/useSymbolSearch";
@@ -40,6 +41,7 @@ export function App() {
   // ── Feature hooks ──
   const workspace = useWorkspace(setNotice, setTab);
   const square = useSquare();
+  const platforms = usePlatforms();
   const symbols = useSymbolSearch(workspace.draft);
   const pipeline = usePipeline(workspace.updateTopicProcessedContent);
 
@@ -200,6 +202,7 @@ export function App() {
                   videoSourceType: "url",
                   videoUrl: "",
                   videoFilePath: "",
+                  targetPlatforms: currentAP.targetPlatforms,
                 };
                 addToQueueRef.current(autoDraft, processed, [], topic.source.replace(/（RSS）$/, ""));
                 queuedCount++;
@@ -220,6 +223,7 @@ export function App() {
               videoSourceType: "url",
               videoUrl: "",
               videoFilePath: "",
+              targetPlatforms: currentAP.targetPlatforms,
             };
             addToQueueRef.current(autoDraft, topic.summary || topic.title, [], topic.source.replace(/（RSS）$/, ""));
             queuedCount++;
@@ -442,6 +446,8 @@ export function App() {
             chooseLocalVideoFile={() => void workspace.chooseLocalVideoFile()}
             composerError={symbols.composerError}
             onQueue={handleQueue}
+            platformConfigs={platforms.platformConfigs}
+            isPlatformConfigured={platforms.isPlatformConfigured}
           />
         )}
 
@@ -479,6 +485,7 @@ export function App() {
             queueLogs={publishing.queueLogs}
             keyConfigured={square.squareConfig?.keyConfigured ?? false}
             savedPipelines={pipeline.savedPipelines}
+            platformConfigs={platforms.platformConfigs}
             onToggle={(v) => {
               publishing.setAutoPublishEnabled(v);
               publishing.appendQueueLog(v ? "已开启全流程自动发布。" : "已关闭全流程自动发布。");
@@ -488,6 +495,7 @@ export function App() {
             onMoveSource={publishing.moveSourcePriority}
             onRemoveSource={publishing.removeSourcePriority}
             onAddSource={publishing.addSourcePriority}
+            onSetTargetPlatforms={publishing.setAutoPublishTargetPlatforms}
           />
         )}
 
@@ -512,6 +520,13 @@ export function App() {
             proxyNotice={square.proxyNotice}
             onSaveProxy={() => void square.saveProxyConfig()}
             onReloadProxy={() => void square.loadProxyConfig()}
+            platformConfigs={platforms.platformConfigs}
+            platformsNotice={platforms.platformsNotice}
+            xTwitterForm={platforms.xTwitterForm}
+            setXTwitterForm={platforms.setXTwitterForm}
+            xTwitterSaving={platforms.xTwitterSaving}
+            onSaveXTwitter={() => void platforms.saveXTwitterCredentials()}
+            onTogglePlatform={(platformId, enabled) => void platforms.togglePlatformEnabled(platformId, enabled)}
           />
         )}
       </main>

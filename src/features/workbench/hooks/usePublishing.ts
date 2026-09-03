@@ -3,11 +3,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   loadDraftStore,
   loadPublishQueue,
-  publishBinanceSquareText,
-  publishBinanceSquareVideoFile,
+  publishToPlatforms,
   saveDraftStore,
   savePublishQueue,
   type BinanceSquareConfig,
+  type PlatformConfig,
+  type PublishResultItem,
   type QueueEntryData,
 } from "../../../lib/tauri";
 import type { AutoPublishConfig, Draft, PublishState, QueueEntryStatus } from "../types";
@@ -20,6 +21,7 @@ const DEFAULT_AUTO_PUBLISH: AutoPublishConfig = {
   lastTime: null,
   sourcePriority: [],
   pipelineId: null,
+  targetPlatforms: ["binance_square"],
 };
 
 export function usePublishing(
@@ -66,6 +68,7 @@ export function usePublishing(
             videoSourceType: draftStore.draft.videoSourceType as Draft["videoSourceType"],
             videoUrl: draftStore.draft.videoUrl,
             videoFilePath: draftStore.draft.videoFilePath,
+            targetPlatforms: (draftStore.draft.targetPlatforms ?? ["binance_square"]) as Draft["targetPlatforms"],
           });
         }
         setQueueLogs(draftStore.queueLogs);
@@ -81,6 +84,7 @@ export function usePublishing(
           lastTime: draftStore.autoPublishLastTime ?? null,
           sourcePriority: draftStore.autoPublishSourcePriority ?? [],
           pipelineId: draftStore.autoPublishPipelineId ?? null,
+          targetPlatforms: (draftStore.autoPublishTargetPlatforms ?? ["binance_square"]) as AutoPublishConfig["targetPlatforms"],
         });
 
         setQueueEntries(queueStore.entries);
@@ -108,6 +112,7 @@ export function usePublishing(
             videoSourceType: draftRef.current.videoSourceType,
             videoUrl: draftRef.current.videoUrl,
             videoFilePath: draftRef.current.videoFilePath,
+            targetPlatforms: draftRef.current.targetPlatforms,
           },
           queueLogs,
           publishState,
@@ -120,6 +125,7 @@ export function usePublishing(
           autoPublishLastTime: autoPublish.lastTime,
           autoPublishSourcePriority: autoPublish.sourcePriority,
           autoPublishPipelineId: autoPublish.pipelineId,
+          autoPublishTargetPlatforms: autoPublish.targetPlatforms,
         }),
         savePublishQueue({ entries: queueEntries }),
       ]).catch((err) => console.error("Failed to save:", err));
@@ -153,6 +159,9 @@ export function usePublishing(
     sourceName: string = "",
   ): string | null => {
     const entryId = `qe-${Date.now()}`;
+    const targetPlatforms = draftData.targetPlatforms.length > 0
+      ? draftData.targetPlatforms
+      : ["binance_square"];
     const newEntry: QueueEntryData = {
       id: entryId,
       title: draftData.title,
@@ -168,10 +177,12 @@ export function usePublishing(
       createdAt: nowText(),
       sentAt: null,
       logs: [],
+      targetPlatforms,
+      platformResults: [],
     };
     setQueueEntries((prev) => [newEntry, ...prev]);
     setSelectedEntryId(entryId);
-    appendQueueLog(`新稿件加入队列：${draftData.title || "(无标题)"}；来源：${sourceName || "未知"}；类型：${draftData.publishType}；标签：${symbols.join(", ")}`);
+    appendQueueLog(`新稿件加入队列：${draftData.title || "(无标题)"}；来源：${sourceName || "未知"}；类型：${draftData.publishType}；平台：${targetPlatforms.join(", ")}；标签：${symbols.join(", ")}`);
     return null;
   }, [appendQueueLog]);
 
@@ -186,43 +197,71 @@ export function usePublishing(
       setNotice("该稿件已发送。");
       return false;
     }
-    if (!squareConfigRef.current?.keyConfigured) {
-      setNotice("Square OpenAPI Key 未配置，无法发送。");
-      return false;
-    }
+
+    const targetPlatforms = entry.targetPlatforms.length > 0
+      ? entry.targetPlatforms
+      : ["binance_square"];
 
     updateEntryStatus(entryId, "sending");
     setPublishState("sending");
     setPublishOutput("");
     const triggerLabel = trigger === "auto" ? "自动发布" : trigger === "scheduled" ? "定时任务" : "手动";
-    appendEntryLog(entryId, `${triggerLabel}开始执行发送...`);
+    appendEntryLog(entryId, `${triggerLabel}开始执行发送到 ${targetPlatforms.length} 个平台...`);
 
     try {
-      const result =
-        entry.publishType === "video" && entry.videoSourceType === "local"
-          ? await publishBinanceSquareVideoFile({
-              title: entry.title || undefined,
-              text: entry.finalBody,
-              videoPath: entry.videoFilePath,
-            })
-          : await publishBinanceSquareText({
-              title: entry.title || undefined,
-              text: entry.finalBody,
-              contentType: entry.publishType as "post" | "article" | "video",
-              videoUrl: entry.publishType === "video" ? entry.videoUrl : undefined,
-            });
+      const request = {
+        title: entry.title || undefined,
+        text: entry.finalBody,
+        contentType: entry.publishType,
+        videoUrl: entry.publishType === "video" ? entry.videoUrl : undefined,
+        videoPath: entry.publishType === "video" && entry.videoSourceType === "local"
+          ? entry.videoFilePath
+          : undefined,
+      };
 
-      setPublishOutput(result.trim());
-      setPublishState("sent");
-      updateEntryStatus(entryId, "sent", { sentAt: nowText() });
-      appendEntryLog(entryId, `${triggerLabel}发送成功。`);
-      appendQueueLog(`${triggerLabel}成功：${entry.title || "(无标题)"}`);
-      setNotice("发送成功。");
+      const results = await publishToPlatforms(request, targetPlatforms);
 
-      if (draftRef.current.queued && draftRef.current.title === entry.title) {
-        setDraft((prev) => ({ ...prev, queued: false }));
+      // Process results
+      const successCount = results.filter((r) => r.success).length;
+      const failCount = results.filter((r) => !r.success).length;
+
+      // Update entry with platform results
+      setQueueEntries((prev) =>
+        prev.map((e) =>
+          e.id === entryId ? { ...e, platformResults: results } : e,
+        ),
+      );
+
+      // Log each platform result
+      for (const r of results) {
+        const statusText = r.success ? "成功" : "失败";
+        appendEntryLog(entryId, `[${r.platform}] ${statusText}: ${r.message}`);
       }
-      return true;
+
+      const outputText = results
+        .map((r) => `[${r.platform}] ${r.success ? "✓" : "✗"} ${r.message}`)
+        .join("\n");
+      setPublishOutput(outputText);
+
+      if (successCount > 0) {
+        setPublishState("sent");
+        updateEntryStatus(entryId, "sent", { sentAt: nowText() });
+        appendEntryLog(entryId, `${triggerLabel}发送完成：${successCount} 个平台成功，${failCount} 个失败。`);
+        appendQueueLog(`${triggerLabel}成功：${entry.title || "(无标题)"}（${successCount}/${targetPlatforms.length} 平台）`);
+        setNotice(`发送完成：${successCount} 个平台成功${failCount > 0 ? `，${failCount} 个失败` : ""}。`);
+
+        if (draftRef.current.queued && draftRef.current.title === entry.title) {
+          setDraft((prev) => ({ ...prev, queued: false }));
+        }
+        return true;
+      } else {
+        setPublishState("failed");
+        updateEntryStatus(entryId, "failed");
+        appendEntryLog(entryId, `${triggerLabel}全部平台发送失败。`);
+        appendQueueLog(`${triggerLabel}失败：${entry.title || "(无标题)"}：所有平台均失败`);
+        setNotice("所有平台发送失败，请查看日志。");
+        return false;
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setPublishOutput(message);
@@ -343,6 +382,10 @@ export function usePublishing(
     setAutoPublish((prev) => ({ ...prev, pipelineId }));
   }, []);
 
+  const setAutoPublishTargetPlatforms = useCallback((targetPlatforms: string[]) => {
+    setAutoPublish((prev) => ({ ...prev, targetPlatforms: targetPlatforms as AutoPublishConfig["targetPlatforms"] }));
+  }, []);
+
   const updateAutoPublishLast = useCallback((sourceName: string) => {
     setAutoPublish((prev) => ({
       ...prev,
@@ -377,6 +420,7 @@ export function usePublishing(
     removeSourcePriority,
     addSourcePriority,
     setAutoPublishPipeline,
+    setAutoPublishTargetPlatforms,
     updateAutoPublishLast,
   };
 }

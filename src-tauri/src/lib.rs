@@ -6,6 +6,7 @@ mod news;
 mod news_source_store;
 mod pipeline;
 mod pipeline_store;
+mod publisher;
 mod publish_queue_store;
 mod topic_store;
 mod workspace;
@@ -51,6 +52,13 @@ pub fn run() {
             // publish queue store
             publish_queue_store::load_publish_queue,
             publish_queue_store::save_publish_queue,
+            // multi-platform publisher
+            publisher::publish_to_platforms,
+            publisher::get_platform_configs,
+            publisher::configure_platform,
+            publisher::set_platform_enabled,
+            publisher::store::load_platform_store,
+            publisher::store::save_platform_store,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Financial Blogger Agent");
