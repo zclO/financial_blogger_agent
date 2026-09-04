@@ -123,6 +123,9 @@ export function App() {
   const squareConfigRef = useRef(square.squareConfig);
   squareConfigRef.current = square.squareConfig;
 
+  const platformConfigsRef = useRef(platforms.platformConfigs);
+  platformConfigsRef.current = platforms.platformConfigs;
+
   const updateAutoPublishLastRef = useRef(publishing.updateAutoPublishLast);
   updateAutoPublishLastRef.current = publishing.updateAutoPublishLast;
 
@@ -132,6 +135,7 @@ export function App() {
     const intervalMs = ap.intervalMinutes * 60 * 1000;
 
     const tick = async () => {
+      try {
       const currentAP = autoPublishRef.current;
 
       // ── Step 1: Fetch news ──
@@ -185,6 +189,7 @@ export function App() {
 
         let queuedCount = 0;
         let processedCount = 0;
+        const newlyQueuedIds: string[] = [];
 
         for (const topic of newTopics) {
           if (pl) {
@@ -204,7 +209,8 @@ export function App() {
                   videoFilePath: "",
                   targetPlatforms: currentAP.targetPlatforms,
                 };
-                addToQueueRef.current(autoDraft, processed, [], topic.source.replace(/（RSS）$/, ""));
+                const entryId = addToQueueRef.current(autoDraft, processed, [], topic.source.replace(/（RSS）$/, ""));
+                if (entryId) newlyQueuedIds.push(entryId);
                 queuedCount++;
               } else {
                 appendQueueLogRef.current(`自动发布：流水线处理「${topic.title}」无输出，跳过。`);
@@ -225,7 +231,8 @@ export function App() {
               videoFilePath: "",
               targetPlatforms: currentAP.targetPlatforms,
             };
-            addToQueueRef.current(autoDraft, topic.summary || topic.title, [], topic.source.replace(/（RSS）$/, ""));
+            const entryId = addToQueueRef.current(autoDraft, topic.summary || topic.title, [], topic.source.replace(/（RSS）$/, ""));
+            if (entryId) newlyQueuedIds.push(entryId);
             queuedCount++;
           }
         }
@@ -239,10 +246,26 @@ export function App() {
       }
 
       // ── Step 4: Publish from queue (round-robin by source priority) ──
-      const entries = queueEntriesRef.current;
-      const pending = entries.filter((e) => e.status === "pending");
+      // Combine existing pending entries with newly queued ones from this tick
+      let entries = queueEntriesRef.current;
+      let pending = entries.filter((e) => e.status === "pending");
       if (pending.length === 0) return;
-      if (!squareConfigRef.current?.keyConfigured) return;
+
+      // Check if at least one target platform is configured
+      const targetPlatforms = currentAP.targetPlatforms.length > 0
+        ? currentAP.targetPlatforms
+        : ["binance_square"];
+      const anyPlatformConfigured = targetPlatforms.some((pid) => {
+        if (pid === "binance_square") return squareConfigRef.current?.keyConfigured ?? false;
+        const pc = platformConfigsRef.current.find((p) => p.platform === pid);
+        if (!pc || !pc.enabled) return false;
+        const keys = Object.keys(pc.credentials);
+        return keys.length > 0 && keys.some((k) => pc.credentials[k] !== "");
+      });
+      if (!anyPlatformConfigured) {
+        appendQueueLogRef.current("自动发布：所有目标平台均未配置凭证，跳过发送。");
+        return;
+      }
 
       const lastSource = currentAP.lastSourceName;
       const priority = currentAP.sourcePriority;
@@ -281,6 +304,10 @@ export function App() {
         if (success) {
           updateAutoPublishLastRef.current(chosenSource);
         }
+      }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appendQueueLogRef.current(`自动发布执行异常：${msg}`);
       }
     };
 
