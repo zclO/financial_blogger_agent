@@ -1,8 +1,47 @@
+# Dependencies
 /node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Build outputs
 /dist
 /target
 /src-tauri/target
+
+# IDE
 /.idea
+/.vscode
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment variables
 .env
 .env.*
 !.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+/coverage
+*.lcov
+
+# Tauri
+/src-tauri/WixTools
+/src-tauri/target/release/bundle
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Misc
+*.tgz
+*.zip
