@@ -68,13 +68,63 @@ React UI (src/)  ── Tauri invoke ──>  Rust 桌面核心 (src-tauri/)
 | Rust | 1.75+ | Tauri 后端编译 |
 | WebView2 | — | Windows 运行时依赖（通常已预装） |
 
-## 快速开始
+## 安装与使用
+
+### 方式一：从 Release 下载（推荐）
+
+1. 前往 [Releases 页面](https://github.com/zclO/financial_blogger_agent/releases)
+2. 下载最新版本的安装包：
+   - `Financial.Blogger.Agent_x.x.x_x64-setup.exe` — Windows 安装程序（推荐）
+   - `Financial.Blogger.Agent_x.x.x_x64.msi` — MSI 安装包
+3. 双击运行安装程序，按提示完成安装
+4. 安装完成后从开始菜单或桌面快捷方式启动
+
+> **提示**：Windows Smart Screen 可能会弹出安全提示，点击「更多信息」→「仍要运行」即可。
+
+### 方式二：从源码构建
+
+需要已安装 [环境要求](#环境要求) 中的所有依赖。
+
+```bash
+# 克隆仓库
+git clone https://github.com/zclO/financial_blogger_agent.git
+cd financial_blogger_agent
+
+# 安装前端依赖
+npm install
+
+# 构建安装包（约需 5-10 分钟）
+npm run tauri:build
+```
+
+构建完成后，安装包位于：
+
+```
+src-tauri/target/release/bundle/
+├── nsis/
+│   └── Financial.Blogger.Agent_x.x.x_x64-setup.exe   # NSIS 安装程序
+└── msi/
+    └── Financial.Blogger.Agent_x.x.x_x64_en-US.msi    # MSI 安装包
+```
+
+选择 `.exe` 或 `.msi` 双击安装即可。
+
+### 首次使用
+
+1. 启动应用后，进入 **设置** 页面配置发布平台凭证（如 Binance Square API Key）
+2. 在 **新闻源** 中添加或确认 RSS 订阅源
+3. 在 **流水线** 中配置内容加工管线（可选，支持纯 LLM 加工）
+4. 通过 **选题池** 管理选题 → **内容工坊** 编辑草稿 → **发布队列** 审核发布
+
+## 快速开始（开发者）
+
+以下面向希望参与开发或调试的用户。普通用户请参考上方的 [安装与使用](#安装与使用)。
 
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/<your-org>/financial-blogger-agent.git
-cd financial-blogger-agent
+git clone https://github.com/zclO/financial_blogger_agent.git
+cd financial_blogger_agent
 ```
 
 ### 2. 安装依赖
@@ -152,6 +202,3 @@ docs/               # 架构与决策记录
 
 ---
 
-<p align="center">
-  <sub>如果这个项目对你有帮助，欢迎 Star ⭐ 支持！</sub>
-</p>
