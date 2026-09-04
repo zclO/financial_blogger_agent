@@ -121,9 +121,10 @@ fn map_entry_to_article(
 
     let summary = strip_html(&raw_summary);
 
-    // Truncate to ~500 chars for readability
-    let summary = if summary.len() > 500 {
-        format!("{}...", &summary[..500])
+    // Truncate to ~500 chars for readability (char-boundary safe)
+    let summary = if summary.chars().count() > 500 {
+        let truncated: String = summary.chars().take(500).collect();
+        format!("{}...", truncated)
     } else {
         summary
     };
