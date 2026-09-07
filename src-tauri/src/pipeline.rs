@@ -59,6 +59,7 @@ struct ChatResponse {
 #[derive(Deserialize)]
 struct ChatChoice {
     message: ChatResponseMessage,
+    finish_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -154,13 +155,21 @@ pub async fn call_llm(app: AppHandle, request: LlmRequest) -> Result<LlmResponse
         let has_null_content = chat_resp.choices.first()
             .map(|c| c.message.content.is_none())
             .unwrap_or(false);
+        let finish_reason = chat_resp.choices.first()
+            .and_then(|c| c.finish_reason.as_deref());
         let mut detail = format!("LLM API 返回内容为空（choices 数量: {}）", choices_count);
         if choices_count == 0 {
             detail.push_str("\nAPI 未返回任何候选结果，请检查模型名称和提示词。");
+        } else if finish_reason == Some("length") {
+            detail.push_str("\n模型因达到 max_tokens 上限而截断，所有内容 token 可能已消耗在推理（reasoning）阶段。");
+            detail.push_str(&format!("\n当前 max_tokens: {}，建议增大该值（如 1024 或更高）。", request.max_tokens));
         } else if has_null_content {
             detail.push_str("\n模型返回了 null 内容，可能原因：");
             detail.push_str("\n  - 提示词触发了内容安全过滤");
             detail.push_str("\n  - 模型不支持的请求格式");
+        }
+        if let Some(reason) = finish_reason {
+            detail.push_str(&format!("\nfinish_reason: {}", reason));
         }
         detail.push_str(&format!("\n原始响应: {}", raw_body));
         return Err(detail);

@@ -62,8 +62,7 @@ export function PipelinePanel({
   running,
   results,
   runLog,
-  currentArticle,
-  newsSources,
+  currentArticle
 }: {
   savedPipelines: SavedPipeline[];
   defaultPipelineId: string | null;
@@ -361,7 +360,6 @@ function PipelineEditor({
   onAddEdge,
   onRemoveEdge,
   onSavePipeline,
-  onLoadPipeline,
   onCloseEditor,
   running,
   results,
@@ -787,7 +785,7 @@ function SmallBtn({
 }
 
 function ContextMenu({
-  x, y, anchor, onClose, children,
+  x, y, anchor, children,
 }: {
   x: number; y: number;
   anchor: HTMLElement | null;
@@ -891,7 +889,7 @@ function LlmConfigEditor({
         systemPrompt: "You are a helpful assistant.",
         userPrompt: "Hi",
         temperature: 0,
-        maxTokens: 10,
+        maxTokens: 128,
       });
       setTestState("success");
       setTestMsg(`连通成功 · 模型: ${resp.model}${resp.usage ? ` · ${resp.usage.totalTokens} tokens` : ""}`);
