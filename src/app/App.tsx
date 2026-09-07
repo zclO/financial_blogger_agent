@@ -483,6 +483,8 @@ export function App() {
             queueEntries={publishing.queueEntries}
             selectedEntryId={publishing.selectedEntryId}
             onSelectEntry={(id) => publishing.selectEntry(id)}
+            onDeleteEntry={(id) => publishing.removeQueueEntry(id)}
+            onDeleteEntries={(ids) => publishing.removeQueueEntries(ids)}
             publishState={publishing.publishState}
             allowScheduledPublish={publishing.allowScheduledPublish}
             onToggleScheduled={(v) => {

@@ -313,6 +313,50 @@ export function usePublishing(
     setNotice("定时发送已取消。");
   }, [updateEntryStatus, appendQueueLog, setNotice]);
 
+  // ── Remove an unsent queue entry ──
+  const removeQueueEntry = useCallback((entryId: string) => {
+    const entry = queueEntriesRef.current.find((e) => e.id === entryId);
+    if (!entry) return;
+    if (entry.status === "sent") {
+      setNotice("已发送的稿件不可删除。");
+      return;
+    }
+    if (entry.status === "sending") {
+      setNotice("正在发送中，无法删除。");
+      return;
+    }
+    setQueueEntries((prev) => prev.filter((e) => e.id !== entryId));
+    appendQueueLog(`已删除队列条目：${entry.title || "(无标题)"}`);
+    // If the deleted entry was selected, pick another one
+    if (selectedEntryId === entryId) {
+      const remaining = queueEntriesRef.current.filter((e) => e.id !== entryId);
+      const nextPending = remaining.find((e) => e.status === "pending" || e.status === "scheduled");
+      setSelectedEntryId(nextPending?.id ?? remaining[0]?.id ?? null);
+      setPublishState("idle");
+      setPublishOutput("");
+    }
+  }, [selectedEntryId, appendQueueLog, setNotice]);
+
+  // ── Batch remove unsent queue entries ──
+  const removeQueueEntries = useCallback((entryIds: string[]) => {
+    if (entryIds.length === 0) return;
+    const toRemove = queueEntriesRef.current.filter(
+      (e) => entryIds.includes(e.id) && e.status !== "sent" && e.status !== "sending",
+    );
+    if (toRemove.length === 0) return;
+    const removeIds = new Set(toRemove.map((e) => e.id));
+    setQueueEntries((prev) => prev.filter((e) => !removeIds.has(e.id)));
+    appendQueueLog(`已批量删除 ${toRemove.length} 个队列条目`);
+    // If the selected entry was among the removed, pick another one
+    if (selectedEntryId && removeIds.has(selectedEntryId)) {
+      const remaining = queueEntriesRef.current.filter((e) => !removeIds.has(e.id));
+      const nextPending = remaining.find((e) => e.status === "pending" || e.status === "scheduled");
+      setSelectedEntryId(nextPending?.id ?? remaining[0]?.id ?? null);
+      setPublishState("idle");
+      setPublishOutput("");
+    }
+  }, [selectedEntryId, appendQueueLog]);
+
   // ── Auto-execute scheduled entries ──
   useEffect(() => {
     if (!allowScheduledPublish) return;
@@ -410,6 +454,8 @@ export function usePublishing(
     appendQueueLog,
     addToQueue,
     publishEntry,
+    removeQueueEntry,
+    removeQueueEntries,
     scheduleEntry,
     cancelScheduleEntry,
     autoPublish,

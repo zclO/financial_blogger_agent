@@ -493,16 +493,23 @@ button.ghost {
 /* ── Queue Panel ── */
 
 .queue-panel .queue-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.queue-filter-group {
   display: inline-flex;
   gap: 0;
-  margin: 12px 0;
   border: 1px solid #cfd4dc;
   border-radius: 8px;
   overflow: hidden;
   background: #fff;
 }
 
-.queue-panel .queue-filters button {
+.queue-filter-group button {
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -511,17 +518,35 @@ button.ghost {
   padding: 6px 14px;
 }
 
-.queue-panel .queue-filters button + button {
+.queue-filter-group button + button {
   border-left: 1px solid #e4e7ec;
 }
 
-.queue-panel .queue-filters button:hover:enabled {
+.queue-filter-group button:hover:enabled {
   background: #edf2f7;
 }
 
-.queue-panel .queue-filters button.active {
+.queue-filter-group button.active {
   background: #0f4c5c;
   color: #ffffff;
+}
+
+.queue-manage-btn {
+  padding: 6px 16px;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  background: #fff;
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.queue-manage-btn:hover {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
 }
 
 .queue-list {
@@ -627,6 +652,145 @@ button.ghost {
 .queue-status-badge.failed {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.queue-item-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.queue-item-delete:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* ── Delete mode bar ── */
+
+.queue-delete-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+}
+
+.queue-delete-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.queue-sel-btn {
+  padding: 4px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.queue-sel-btn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.queue-sel-count {
+  font-size: 12px;
+  color: #6b7280;
+  padding-left: 4px;
+}
+
+.queue-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.queue-confirm-delete {
+  padding: 5px 16px;
+  border: 1px solid #dc2626;
+  border-radius: 6px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.queue-confirm-delete:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.queue-confirm-delete:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.queue-cancel-delete {
+  padding: 5px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.queue-cancel-delete:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  color: #374151;
+}
+
+.queue-item-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: #dc2626;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.queue-item.checked {
+  border-color: #fca5a5;
+  background: #fef7f7;
+}
+
+.queue-item.checked:hover {
+  border-color: #f87171;
+  background: #fef2f2;
+}
+
+.queue-panel .actions .danger {
+  border: 1px solid #fca5a5;
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.queue-panel .actions .danger:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #f87171;
 }
 
 .queue-detail {
