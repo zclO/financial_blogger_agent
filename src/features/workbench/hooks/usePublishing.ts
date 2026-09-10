@@ -69,6 +69,9 @@ export function usePublishing(
             videoUrl: draftStore.draft.videoUrl,
             videoFilePath: draftStore.draft.videoFilePath,
             targetPlatforms: (draftStore.draft.targetPlatforms ?? ["binance_square"]) as Draft["targetPlatforms"],
+            imageBase64: draftStore.draft.imageBase64,
+            imageMime: draftStore.draft.imageMime,
+            imageName: draftStore.draft.imageName,
           });
         }
         setQueueLogs(draftStore.queueLogs);
@@ -113,6 +116,9 @@ export function usePublishing(
             videoUrl: draftRef.current.videoUrl,
             videoFilePath: draftRef.current.videoFilePath,
             targetPlatforms: draftRef.current.targetPlatforms,
+            imageBase64: draftRef.current.imageBase64,
+            imageMime: draftRef.current.imageMime,
+            imageName: draftRef.current.imageName,
           },
           queueLogs,
           publishState,
@@ -179,6 +185,9 @@ export function usePublishing(
       logs: [],
       targetPlatforms,
       platformResults: [],
+      imageBase64: draftData.imageBase64,
+      imageMime: draftData.imageMime,
+      imageName: draftData.imageName,
     };
     setQueueEntries((prev) => [newEntry, ...prev]);
     setSelectedEntryId(entryId);
@@ -217,6 +226,9 @@ export function usePublishing(
         videoPath: entry.publishType === "video" && entry.videoSourceType === "local"
           ? entry.videoFilePath
           : undefined,
+        imageBase64: entry.imageBase64,
+        imageMime: entry.imageMime,
+        imageName: entry.imageName,
       };
 
       const results = await publishToPlatforms(request, targetPlatforms);

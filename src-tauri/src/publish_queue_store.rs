@@ -27,6 +27,12 @@ pub struct QueueEntry {
     pub target_platforms: Vec<String>,
     #[serde(default)]
     pub platform_results: Vec<PublishResult>,
+    #[serde(default)]
+    pub image_base64: Option<String>,
+    #[serde(default)]
+    pub image_mime: Option<String>,
+    #[serde(default)]
+    pub image_name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]

@@ -2,6 +2,7 @@ mod article_log_store;
 mod binance;
 mod draft_store;
 mod http;
+mod image_gen;
 mod news;
 mod news_source_store;
 mod pipeline;
@@ -37,6 +38,8 @@ pub fn run() {
             news_source_store::save_news_source_store,
             // pipeline
             pipeline::call_llm,
+            // image generation
+            image_gen::generate_image,
             // pipeline store
             pipeline_store::load_pipelines,
             pipeline_store::save_pipelines,

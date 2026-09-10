@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   callLlm,
+  generateImage,
   loadArticleLogStore,
   loadPipelines,
   saveArticleLogStore,
@@ -13,9 +14,12 @@ import {
 import {
   DEFAULT_LLM_SYSTEM_PROMPT,
   DEFAULT_LLM_USER_PROMPT,
+  DEFAULT_IMAGE_PROMPT,
+  DEFAULT_IMAGE_NEGATIVE_PROMPT,
 } from "../constants";
 import type {
   FlowEdge,
+  ImageNodeConfig,
   LlmNodeConfig,
   PipelineNode,
   PipelineNodeKind,
@@ -40,6 +44,18 @@ function defaultLlmConfig(): LlmNodeConfig {
   };
 }
 
+function defaultImageConfig(): ImageNodeConfig {
+  return {
+    apiEndpoint: "",
+    apiKey: "",
+    promptTemplate: DEFAULT_IMAGE_PROMPT,
+    negativePrompt: DEFAULT_IMAGE_NEGATIVE_PROMPT,
+    outputFormat: "png",
+    width: 1024,
+    height: 1024,
+  };
+}
+
 function toStored(p: SavedPipeline): StoredPipeline {
   return {
     id: p.id,
@@ -52,6 +68,7 @@ function toStored(p: SavedPipeline): StoredPipeline {
       position: n.position,
       sourceConfig: n.sourceConfig,
       llmConfig: n.llmConfig,
+      imageConfig: n.imageConfig,
     })),
     edges: p.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
   };
@@ -69,6 +86,7 @@ function fromStored(s: StoredPipeline): SavedPipeline {
       position: n.position,
       sourceConfig: n.sourceConfig,
       llmConfig: n.llmConfig,
+      imageConfig: n.imageConfig,
     })),
     edges: s.edges.map((e) => ({
       id: e.id,
@@ -196,6 +214,47 @@ async function executePipeline(
         nodeOutputs.set(nodeId, input);
         anyNodeFailed = true;
       }
+    } else if (node.kind === "image") {
+      const config = node.imageConfig;
+      if (!config || !config.apiKey) {
+        appendLog(`\u26A0\uFE0F \u300C${node.name}\u300D\u672A\u914D\u7F6E API Key\uFF0C\u8DF3\u8FC7\u3002`);
+        nodeOutputs.set(nodeId, input);
+        continue;
+      }
+      appendLog(`\u{1F5BC}\uFE0F \u300C${node.name}\u300D\u6B63\u5728\u751F\u6210\u914D\u56FE\u2026`);
+
+      const prompt = config.promptTemplate
+        .replace(/\{\{title\}\}/g, input.originalTitle)
+        .replace(/\{\{summary\}\}/g, input.processedContent)
+        .replace(/\{\{source\}\}/g, input.sourceName)
+        .replace(/\{\{link\}\}/g, input.link);
+
+      try {
+        const resp = await generateImage({
+          apiKey: config.apiKey,
+          apiEndpoint: config.apiEndpoint || undefined,
+          prompt,
+          negativePrompt: config.negativePrompt || undefined,
+          outputFormat: config.outputFormat || "png",
+          width: config.width || 1024,
+          height: config.height || 1024,
+        });
+        const sizeKB = (resp.imageBase64.length * 0.75 / 1024).toFixed(0);
+        appendLog(`  \u2192 \u751F\u6210\u56FE\u7247 ${resp.fileName} \u00B7 ${sizeKB} KB`);
+        nodeOutputs.set(nodeId, {
+          ...input,
+          generatedImage: resp.imageBase64,
+          generatedImageName: resp.fileName,
+          generatedImageMime: resp.mimeType,
+        });
+        appendLog(`\u2705 \u300C${node.name}\u300D\u914D\u56FE\u751F\u6210\u5B8C\u6210\u3002`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appendLog(`  \u2192 \u5931\u8D25: ${msg}`);
+        appendLog(`\u274C \u300C${node.name}\u300D\u914D\u56FE\u5931\u8D25\uFF0C\u6CBF\u7528\u539F\u59CB\u6570\u636E\u3002`);
+        nodeOutputs.set(nodeId, input);
+        anyNodeFailed = true;
+      }
     } else {
       nodeOutputs.set(nodeId, input);
     }
@@ -221,7 +280,7 @@ async function executePipeline(
 
 // ── Hook ──
 
-export function usePipeline(onProcessComplete?: (topicId: number, content: string) => void) {
+export function usePipeline(onProcessComplete?: (topicId: number, content: string, generatedImage?: string, generatedImageName?: string, generatedImageMime?: string) => void) {
   // Saved pipelines
   const [savedPipelines, setSavedPipelines] = useState<SavedPipeline[]>([]);
   const [defaultPipelineId, setDefaultPipelineId] = useState<string | null>(null);
@@ -425,6 +484,37 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
     persist(updated, null);
   }, [savedPipelines, persist]);
 
+  const copyPipeline = useCallback(
+    (id: string) => {
+      const src = savedPipelines.find((p) => p.id === id);
+      if (!src) return;
+      const newId = `pl-${Date.now()}`;
+      // Generate new IDs for nodes and edges, remapping references
+      const nodeIdMap = new Map<string, string>();
+      const newNodes = src.nodes.map((n) => {
+        const newNid = `node-${++nextId}`;
+        nodeIdMap.set(n.id, newNid);
+        return { ...n, id: newNid };
+      });
+      const newEdges = src.edges.map((e) => ({
+        id: `edge-${++nextId}`,
+        source: nodeIdMap.get(e.source) ?? e.source,
+        target: nodeIdMap.get(e.target) ?? e.target,
+      }));
+      const copy: SavedPipeline = {
+        id: newId,
+        name: `${src.name} (副本)`,
+        isDefault: false,
+        nodes: newNodes,
+        edges: newEdges,
+      };
+      const updated = [...savedPipelines, copy];
+      setSavedPipelines(updated);
+      persist(updated, defaultPipelineId);
+    },
+    [savedPipelines, defaultPipelineId, persist],
+  );
+
   const closeEditor = useCallback(() => {
     setEditingPipelineId(null);
     setNodes([]);
@@ -441,13 +531,14 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
   const addNode = useCallback(
     (kind: PipelineNodeKind, position: { x: number; y: number }) => {
       const id = `node-${++nextId}`;
-      const name = kind === "source" ? "\u4FE1\u606F\u6E90" : "\u5927\u6A21\u578B";
+      const name = kind === "source" ? "\u4FE1\u606F\u6E90" : kind === "llm" ? "\u5927\u6A21\u578B" : "\u914D\u56FE\u751F\u6210";
       const node: PipelineNode = {
         id,
         kind,
         name,
         position,
         ...(kind === "llm" ? { llmConfig: defaultLlmConfig() } : {}),
+        ...(kind === "image" ? { imageConfig: defaultImageConfig() } : {}),
       };
       setNodes((prev) => [...prev, node]);
       setSelectedNodeId(id);
@@ -499,6 +590,33 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
     [],
   );
 
+  const updateImageConfig = useCallback(
+    (nodeId: string, config: Partial<ImageNodeConfig>) => {
+      setNodes((prev) =>
+        prev.map((n) =>
+          n.id === nodeId
+            ? {
+                ...n,
+                imageConfig: {
+                  apiEndpoint: "",
+                  apiKey: "",
+                  promptTemplate: "",
+                  negativePrompt: "",
+                  outputFormat: "png",
+                  width: 1024,
+                  height: 1024,
+                  ...n.imageConfig,
+                  ...config,
+                },
+              }
+            : n,
+        ),
+      );
+      setDirty(true);
+    },
+    [],
+  );
+
   // ── Edge CRUD ──
 
   const addEdge = useCallback((source: string, target: string) => {
@@ -534,7 +652,7 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
       setResults(res);
       // Persist processed content back to the topic
       if (res.length > 0 && res[0].processedContent) {
-        onCompleteRef.current?.(topic.id, res[0].processedContent);
+        onCompleteRef.current?.(topic.id, res[0].processedContent, res[0].generatedImage, res[0].generatedImageName, res[0].generatedImageMime);
       }
       // Persist log entry
       const hasError = collectedLogs.some((l) => l.includes("❌") || l.includes("失败"));
@@ -605,7 +723,7 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
       const res = await executePipeline(pl.nodes, pl.edges, topic, collectLog);
       setResults(res);
       if (res.length > 0 && res[0].processedContent) {
-        onCompleteRef.current?.(topic.id, res[0].processedContent);
+        onCompleteRef.current?.(topic.id, res[0].processedContent, res[0].generatedImage, res[0].generatedImageName, res[0].generatedImageMime);
       }
       const hasError = collectedLogs.some((l) => l.includes("❌") || l.includes("失败"));
       persistArticleLog({
@@ -648,7 +766,7 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
       setResults(res);
       // Persist processed content back to the topic
       if (res.length > 0 && res[0].processedContent) {
-        onCompleteRef.current?.(topic.id, res[0].processedContent);
+        onCompleteRef.current?.(topic.id, res[0].processedContent, res[0].generatedImage, res[0].generatedImageName, res[0].generatedImageMime);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -670,6 +788,7 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
     editingPipeline,
     dirty,
     createPipeline,
+    copyPipeline,
     loadPipeline,
     saveCurrentPipeline,
     renamePipeline,
@@ -687,6 +806,7 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
     removeNode,
     updateNodePosition,
     updateLlmConfig,
+    updateImageConfig,
     addEdge,
     removeEdge,
     // Execution

@@ -15,6 +15,12 @@ pub struct PublishRequest {
     pub content_type: String,
     pub video_url: Option<String>,
     pub video_path: Option<String>,
+    #[serde(default)]
+    pub image_base64: Option<String>,
+    #[serde(default)]
+    pub image_mime: Option<String>,
+    #[serde(default)]
+    pub image_name: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug)]

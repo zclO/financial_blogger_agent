@@ -38,6 +38,12 @@ export const DEFAULT_LLM_SYSTEM_PROMPT =
 export const DEFAULT_LLM_USER_PROMPT =
   "标题：{{title}}\n来源：{{source}}\n摘要：{{summary}}\n链接：{{link}}\n\n请根据以上新闻素材撰写一篇财经资讯。";
 
+export const DEFAULT_IMAGE_PROMPT =
+  "A professional financial news illustration for: \"{{title}}\". Clean, modern design with subtle crypto/finance motifs, warm lighting, high quality, editorial style.";
+
+export const DEFAULT_IMAGE_NEGATIVE_PROMPT =
+  "blurry, low quality, distorted text, watermark, ugly, deformed, nsfw";
+
 export const DEFAULT_PIPELINE_NODES: PipelineNode[] = [
   {
     id: "source-default",

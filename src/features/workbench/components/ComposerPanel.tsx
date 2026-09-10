@@ -124,6 +124,34 @@ export function ComposerPanel({
             />
           </label>
           <p className="char-count">{draft.body.length} 字</p>
+
+          {/* Image preview */}
+          {draft.imageBase64 && (
+            <div style={{ marginTop: "0.75rem" }}>
+              <label>配图预览</label>
+              <div style={{ position: "relative", display: "inline-block" }}>
+                <img
+                  src={`data:${draft.imageMime ?? "image/png"};base64,${draft.imageBase64}`}
+                  alt={draft.imageName ?? "生成的配图"}
+                  style={{ maxWidth: "100%", maxHeight: 300, borderRadius: 8, border: "1px solid #ddd" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setDraft((prev) => ({ ...prev, imageBase64: undefined, imageMime: undefined, imageName: undefined }))}
+                  style={{
+                    position: "absolute", top: 4, right: 4,
+                    background: "rgba(0,0,0,0.5)", color: "#fff", border: "none",
+                    borderRadius: "50%", width: 24, height: 24, cursor: "pointer",
+                    fontSize: 14, lineHeight: "24px", textAlign: "center",
+                  }}
+                  title="移除配图"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="hint">{draft.imageName ?? "生成的配图"}</p>
+            </div>
+          )}
         </div>
 
         <div className="composer-side">

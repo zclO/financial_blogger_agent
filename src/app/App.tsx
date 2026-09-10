@@ -208,6 +208,9 @@ export function App() {
                   videoUrl: "",
                   videoFilePath: "",
                   targetPlatforms: currentAP.targetPlatforms,
+                  imageBase64: results[0]?.generatedImage,
+                  imageMime: results[0]?.generatedImageMime,
+                  imageName: results[0]?.generatedImageName,
                 };
                 const entryId = addToQueueRef.current(autoDraft, processed, [], topic.source.replace(/（RSS）$/, ""));
                 if (entryId) newlyQueuedIds.push(entryId);
@@ -437,9 +440,11 @@ export function App() {
             onRemoveNode={pipeline.removeNode}
             onUpdateNodePosition={pipeline.updateNodePosition}
             onUpdateLlmConfig={pipeline.updateLlmConfig}
+            onUpdateImageConfig={pipeline.updateImageConfig}
             onAddEdge={pipeline.addEdge}
             onRemoveEdge={pipeline.removeEdge}
             onCreatePipeline={pipeline.createPipeline}
+            onCopyPipeline={pipeline.copyPipeline}
             onLoadPipeline={pipeline.loadPipeline}
             onSavePipeline={pipeline.saveCurrentPipeline}
             onRenamePipeline={pipeline.renamePipeline}

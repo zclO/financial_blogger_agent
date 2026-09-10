@@ -142,6 +142,28 @@ export function callLlm(request: LlmRequest): Promise<LlmResponse> {
   return invoke<LlmResponse>("call_llm", { request });
 }
 
+// ── Image Generation ──
+
+export interface ImageGenRequest {
+  apiKey: string;
+  apiEndpoint?: string;
+  prompt: string;
+  negativePrompt?: string;
+  outputFormat?: string;
+  width?: number;
+  height?: number;
+}
+
+export interface ImageGenResponse {
+  imageBase64: string;
+  fileName: string;
+  mimeType: string;
+}
+
+export function generateImage(request: ImageGenRequest): Promise<ImageGenResponse> {
+  return invoke<ImageGenResponse>("generate_image", { request });
+}
+
 // ── Pipeline Store ──
 
 export interface StoredPipelineNode {
@@ -158,6 +180,15 @@ export interface StoredPipelineNode {
     userPromptTemplate: string;
     temperature: number;
     maxTokens: number;
+  };
+  imageConfig?: {
+    apiEndpoint: string;
+    apiKey: string;
+    promptTemplate: string;
+    negativePrompt: string;
+    outputFormat: string;
+    width: number;
+    height: number;
   };
 }
 
@@ -198,6 +229,9 @@ export interface StoredTopic {
   summary?: string;
   link?: string;
   processedContent?: string;
+  generatedImage?: string;
+  generatedImageName?: string;
+  generatedImageMime?: string;
 }
 
 export interface TopicStoreData {
@@ -225,6 +259,9 @@ export interface StoredDraft {
   videoUrl: string;
   videoFilePath: string;
   targetPlatforms: string[];
+  imageBase64?: string;
+  imageMime?: string;
+  imageName?: string;
 }
 
 export interface DraftStoreData {
@@ -293,6 +330,9 @@ export interface QueueEntryData {
   logs: string[];
   targetPlatforms: string[];
   platformResults: PublishResultItem[];
+  imageBase64?: string;
+  imageMime?: string;
+  imageName?: string;
 }
 
 export interface PublishQueueStoreData {
@@ -323,6 +363,9 @@ export interface PublishRequest {
   contentType: string;
   videoUrl?: string;
   videoPath?: string;
+  imageBase64?: string;
+  imageMime?: string;
+  imageName?: string;
 }
 
 export interface PublishResultItem {

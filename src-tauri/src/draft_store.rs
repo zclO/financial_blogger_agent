@@ -17,6 +17,12 @@ pub struct StoredDraft {
     pub video_file_path: String,
     #[serde(default)]
     pub target_platforms: Vec<String>,
+    #[serde(default)]
+    pub image_base64: Option<String>,
+    #[serde(default)]
+    pub image_mime: Option<String>,
+    #[serde(default)]
+    pub image_name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]

@@ -265,7 +265,23 @@ export function WorkflowRunModal({
                   alignItems: "center", justifyContent: "center", fontSize: 11,
                 }}>📄</span>
                 查看加工结果
+                {results[0].generatedImage && " 🖼️"}
               </summary>
+              {results[0].generatedImage && (
+                <div style={{ marginTop: 8, marginBottom: 8 }}>
+                  <img
+                    src={`data:${results[0].generatedImageMime ?? "image/png"};base64,${results[0].generatedImage}`}
+                    alt={results[0].generatedImageName ?? "Generated"}
+                    style={{
+                      maxWidth: "100%", borderRadius: 8,
+                      border: "1px solid #e5e7eb",
+                    }}
+                  />
+                  <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
+                    {results[0].generatedImageName}
+                  </div>
+                </div>
+              )}
               <pre style={resultPreStyle}>
                 {results[0].processedContent}
               </pre>

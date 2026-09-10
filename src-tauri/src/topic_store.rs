@@ -17,6 +17,12 @@ pub struct StoredTopic {
     pub link: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub processed_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generated_image: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generated_image_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generated_image_mime: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]

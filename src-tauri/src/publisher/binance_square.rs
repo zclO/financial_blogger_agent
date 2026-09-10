@@ -25,6 +25,29 @@ impl PublishPlatform for BinanceSquarePlatform {
             return Err("正文不能为空".into());
         }
 
+        // If there's an image, save base64 to a temp file
+        let image_path: Option<String> = if let Some(ref b64) = req.image_base64 {
+            if !b64.is_empty() {
+                let ext = req.image_mime.as_deref()
+                    .and_then(|m| m.split('/').nth(1))
+                    .unwrap_or("png");
+                let ext = ext.split(';').next().unwrap_or("png");
+                let file_name = req.image_name.as_deref().unwrap_or("generated-image");
+                let temp_dir = std::env::temp_dir();
+                let temp_path = temp_dir.join(format!("bs_publish_{}.{}", file_name, ext));
+                use base64::Engine;
+                let bytes = base64::engine::general_purpose::STANDARD.decode(b64)
+                    .map_err(|e| format!("解码图片 base64 失败: {}", e))?;
+                std::fs::write(&temp_path, &bytes)
+                    .map_err(|e| format!("写入临时图片文件失败: {}", e))?;
+                Some(temp_path.to_string_lossy().to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         let message = if req.content_type == "video"
             && req.video_path.as_deref().map_or(false, |p| !p.is_empty())
         {
@@ -49,7 +72,7 @@ impl PublishPlatform for BinanceSquarePlatform {
             }
             run_square_script(app, "post-video.mjs", &args)?
         } else {
-            // Text or video with URL
+            // Text or video with URL (possibly with image)
             let mut args = vec!["--text".to_string(), req.text.clone()];
             if !req.content_type.is_empty() {
                 args.push("--contentType".to_string());
@@ -67,8 +90,17 @@ impl PublishPlatform for BinanceSquarePlatform {
                     args.push(v.trim().to_string());
                 }
             }
+            if let Some(ref img) = image_path {
+                args.push("--image".to_string());
+                args.push(img.clone());
+            }
             run_square_script(app, "post-text.mjs", &args)?
         };
+
+        // Clean up temp image file
+        if let Some(ref path) = image_path {
+            let _ = std::fs::remove_file(path);
+        }
 
         Ok(PublishResult {
             platform: "binance_square".to_string(),

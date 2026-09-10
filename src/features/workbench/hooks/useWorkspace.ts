@@ -44,6 +44,9 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
     videoUrl: "",
     videoFilePath: "",
     targetPlatforms: ["binance_square"] as PlatformId[],
+    imageBase64: undefined,
+    imageMime: undefined,
+    imageName: undefined,
   });
 
   const verifiedCount = useMemo(() => topics.filter((x) => x.verified).length, [topics]);
@@ -79,6 +82,9 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
         videoUrl: "",
         videoFilePath: "",
         targetPlatforms: ["binance_square"] as PlatformId[],
+        imageBase64: topic.generatedImage || undefined,
+        imageMime: topic.generatedImageMime || undefined,
+        imageName: topic.generatedImageName || undefined,
       });
     }
     setTab("内容工坊");
@@ -123,10 +129,10 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
     setTab("选题池");
   };
 
-  /** Update a topic's processed content (called after pipeline execution) */
-  const updateTopicProcessedContent = (id: number, processedContent: string) => {
+  /** Update a topic's processed content and image (called after pipeline execution) */
+  const updateTopicProcessedContent = (id: number, processedContent: string, generatedImage?: string, generatedImageName?: string, generatedImageMime?: string) => {
     setTopics((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, processedContent } : t)),
+      prev.map((t) => (t.id === id ? { ...t, processedContent, generatedImage, generatedImageName, generatedImageMime } : t)),
     );
   };
 

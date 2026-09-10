@@ -22,7 +22,7 @@ export type AutoPublishConfig = {
   targetPlatforms: PlatformId[];
 };
 
-export type Topic = { id: number; title: string; source: string; verified: boolean; summary?: string; link?: string; processedContent?: string };
+export type Topic = { id: number; title: string; source: string; verified: boolean; summary?: string; link?: string; processedContent?: string; generatedImage?: string; generatedImageName?: string; generatedImageMime?: string };
 
 export type Draft = {
   title: string;
@@ -34,6 +34,12 @@ export type Draft = {
   videoUrl: string;
   videoFilePath: string;
   targetPlatforms: PlatformId[];
+  /** Base64-encoded image from pipeline */
+  imageBase64?: string;
+  /** Image MIME type */
+  imageMime?: string;
+  /** Image file name hint */
+  imageName?: string;
 };
 
 export type SquareState = {
@@ -86,7 +92,7 @@ export type NewsFetchResult = {
 
 // ── Pipeline types ──
 
-export type PipelineNodeKind = "source" | "llm";
+export type PipelineNodeKind = "source" | "llm" | "image";
 
 export type SourceNodeConfig = {
   /** 选中的新闻源 ID 列表，空数组表示全部 */
@@ -103,6 +109,16 @@ export type LlmNodeConfig = {
   maxTokens: number;
 };
 
+export type ImageNodeConfig = {
+  apiEndpoint: string;
+  apiKey: string;
+  promptTemplate: string;
+  negativePrompt: string;
+  outputFormat: string;
+  width: number;
+  height: number;
+};
+
 export type PipelineNode = {
   id: string;
   kind: PipelineNodeKind;
@@ -110,6 +126,7 @@ export type PipelineNode = {
   position: { x: number; y: number };
   sourceConfig?: SourceNodeConfig;
   llmConfig?: LlmNodeConfig;
+  imageConfig?: ImageNodeConfig;
 };
 
 export type ProcessedArticle = {
@@ -118,6 +135,12 @@ export type ProcessedArticle = {
   sourceName: string;
   link: string;
   processedContent: string;
+  /** Base64-encoded generated image (if pipeline includes an image node) */
+  generatedImage?: string;
+  /** Image file name hint */
+  generatedImageName?: string;
+  /** Image MIME type */
+  generatedImageMime?: string;
 };
 
 export type FlowEdge = {

@@ -13,8 +13,9 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { callLlm } from "../../../lib/tauri";
+import { callLlm, generateImage } from "../../../lib/tauri";
 import type {
+  ImageNodeConfig,
   LlmNodeConfig,
   PipelineNode,
   PipelineNodeKind,
@@ -49,6 +50,7 @@ export function PipelinePanel({
   onRemoveNode,
   onUpdateNodePosition,
   onUpdateLlmConfig,
+  onUpdateImageConfig,
   onAddEdge,
   onRemoveEdge,
   onCreatePipeline,
@@ -58,6 +60,7 @@ export function PipelinePanel({
   onDeletePipeline,
   onSetDefaultPipeline,
   onClearDefaultPipeline,
+  onCopyPipeline,
   onCloseEditor,
   running,
   results,
@@ -78,6 +81,7 @@ export function PipelinePanel({
   onRemoveNode: (id: string) => void;
   onUpdateNodePosition: (id: string, pos: { x: number; y: number }) => void;
   onUpdateLlmConfig: (nodeId: string, config: Partial<LlmNodeConfig>) => void;
+  onUpdateImageConfig: (nodeId: string, config: Partial<ImageNodeConfig>) => void;
   onAddEdge: (source: string, target: string) => void;
   onRemoveEdge: (edgeId: string) => void;
   onCreatePipeline: (name: string) => string;
@@ -87,6 +91,7 @@ export function PipelinePanel({
   onDeletePipeline: (id: string) => void;
   onSetDefaultPipeline: (id: string) => void;
   onClearDefaultPipeline: () => void;
+  onCopyPipeline: (id: string) => void;
   onCloseEditor: () => void;
   running: boolean;
   results: ProcessedArticle[];
@@ -109,6 +114,7 @@ export function PipelinePanel({
         onRemoveNode={onRemoveNode}
         onUpdateNodePosition={onUpdateNodePosition}
         onUpdateLlmConfig={onUpdateLlmConfig}
+        onUpdateImageConfig={onUpdateImageConfig}
         onAddEdge={onAddEdge}
         onRemoveEdge={onRemoveEdge}
         onSavePipeline={onSavePipeline}
@@ -132,6 +138,7 @@ export function PipelinePanel({
       onDeletePipeline={onDeletePipeline}
       onSetDefaultPipeline={onSetDefaultPipeline}
       onClearDefaultPipeline={onClearDefaultPipeline}
+      onCopyPipeline={onCopyPipeline}
     />
   );
 }
@@ -149,6 +156,7 @@ function PipelineList({
   onDeletePipeline,
   onSetDefaultPipeline,
   onClearDefaultPipeline,
+  onCopyPipeline,
 }: {
   savedPipelines: SavedPipeline[];
   defaultPipelineId: string | null;
@@ -158,6 +166,7 @@ function PipelineList({
   onDeletePipeline: (id: string) => void;
   onSetDefaultPipeline: (id: string) => void;
   onClearDefaultPipeline: () => void;
+  onCopyPipeline: (id: string) => void;
 }) {
   const [newName, setNewName] = useState("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -309,6 +318,13 @@ function PipelineList({
                     {isDefault ? "★" : "☆"}
                   </SmallBtn>
                   <SmallBtn
+                    title="复制流水线"
+                    onClick={() => onCopyPipeline(pl.id)}
+                    style={{ color: "#0ea5e9", borderColor: "#bae6fd" }}
+                  >
+                    ⧉
+                  </SmallBtn>
+                  <SmallBtn
                     title="重命名"
                     onClick={() => startRename(pl.id, pl.name)}
                     style={{ color: "#888", borderColor: "#e5e7eb" }}
@@ -357,6 +373,7 @@ function PipelineEditor({
   onRemoveNode,
   onUpdateNodePosition,
   onUpdateLlmConfig,
+  onUpdateImageConfig,
   onAddEdge,
   onRemoveEdge,
   onSavePipeline,
@@ -377,6 +394,7 @@ function PipelineEditor({
   onRemoveNode: (id: string) => void;
   onUpdateNodePosition: (id: string, pos: { x: number; y: number }) => void;
   onUpdateLlmConfig: (nodeId: string, config: Partial<LlmNodeConfig>) => void;
+  onUpdateImageConfig: (nodeId: string, config: Partial<ImageNodeConfig>) => void;
   onAddEdge: (source: string, target: string) => void;
   onRemoveEdge: (edgeId: string) => void;
   onSavePipeline: () => void;
@@ -558,6 +576,10 @@ function PipelineEditor({
             icon="🤖" label="大模型" desc="LLM 加工"
             color="#7c3aed" onClick={() => handleAddNode("llm")}
           />
+          <PaletteButton
+            icon="🖼️" label="配图生成" desc="AI 配图"
+            color="#f59e0b" onClick={() => handleAddNode("image")}
+          />
           <div style={{ marginTop: "1rem", fontSize: 11, color: "#aaa", lineHeight: 1.5 }}>
             点击添加节点到画布。拖动端口创建连线。右键可快速添加。
           </div>
@@ -609,6 +631,8 @@ function PipelineEditor({
                     onClick={() => handleAddNodeAt("source")} />
                   <CtxItem icon="🤖" label="添加大模型"
                     onClick={() => handleAddNodeAt("llm")} />
+                  <CtxItem icon="🖼️" label="添加配图生成"
+                    onClick={() => handleAddNodeAt("image")} />
                 </>
               )}
             </ContextMenu>
@@ -627,7 +651,7 @@ function PipelineEditor({
                 marginBottom: "0.75rem",
               }}>
                 <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
-                  {selectedNode.kind === "source" ? "📰" : "🤖"} {selectedNode.name}
+                  {selectedNode.kind === "source" ? "📰" : selectedNode.kind === "llm" ? "🤖" : "🖼️"} {selectedNode.name}
                 </h3>
                 <button
                   onClick={() => onRemoveNode(selectedNode.id)}
@@ -702,6 +726,22 @@ function PipelineEditor({
                   onUpdate={onUpdateLlmConfig}
                 />
               )}
+
+              {selectedNode.kind === "image" && (
+                <ImageConfigEditor
+                  nodeId={selectedNode.id}
+                  config={selectedNode.imageConfig ?? {
+                    apiEndpoint: "",
+                    apiKey: "",
+                    promptTemplate: "",
+                    negativePrompt: "",
+                    outputFormat: "png",
+                    width: 1024,
+                    height: 1024,
+                  }}
+                  onUpdate={onUpdateImageConfig}
+                />
+              )}
             </div>
           ) : (
             <div style={{ padding: "1.5rem 1rem", color: "#888", textAlign: "center" }}>
@@ -719,6 +759,21 @@ function PipelineEditor({
                   <summary style={{ cursor: "pointer", fontSize: 13 }}>
                     <b>{r.originalTitle}</b>
                   </summary>
+                  {r.generatedImage && (
+                    <div style={{ marginTop: "0.5rem" }}>
+                      <img
+                        src={`data:${r.generatedImageMime ?? "image/png"};base64,${r.generatedImage}`}
+                        alt={r.generatedImageName ?? "Generated"}
+                        style={{
+                          maxWidth: "100%", borderRadius: 8,
+                          border: "1px solid #e5e7eb",
+                        }}
+                      />
+                      <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
+                        {r.generatedImageName}
+                      </div>
+                    </div>
+                  )}
                   <pre style={{
                     whiteSpace: "pre-wrap", fontSize: 12, background: "#f9f9f9",
                     padding: "0.5rem", borderRadius: 6, marginTop: "0.25rem",
@@ -975,6 +1030,138 @@ function LlmConfigEditor({
           变量：{`{{title}}`} {`{{summary}}`} {`{{source}}`} {`{{link}}`}
         </span>
       </label>
+    </div>
+  );
+}
+
+function ImageConfigEditor({
+  nodeId, config, onUpdate,
+}: {
+  nodeId: string;
+  config: ImageNodeConfig;
+  onUpdate: (nodeId: string, config: Partial<ImageNodeConfig>) => void;
+}) {
+  const [testState, setTestState] = useState<"idle" | "testing" | "success" | "error">("idle");
+  const [testMsg, setTestMsg] = useState("");
+
+  const handleTest = async () => {
+    if (!config.apiKey) {
+      setTestState("error");
+      setTestMsg("请先填写 API Key。");
+      return;
+    }
+    if (!config.promptTemplate.trim()) {
+      setTestState("error");
+      setTestMsg("请先填写提示词模板。");
+      return;
+    }
+    setTestState("testing");
+    setTestMsg("");
+    try {
+      const resp = await generateImage({
+        apiKey: config.apiKey,
+        apiEndpoint: config.apiEndpoint || undefined,
+        prompt: "A cute orange tabby cat sitting on a windowsill, warm sunlight",
+        outputFormat: config.outputFormat || "png",
+        width: config.width || 1024,
+        height: config.height || 1024,
+      });
+      setTestState("success");
+      setTestMsg(`连通成功 · ${resp.fileName} · ${(resp.imageBase64.length * 0.75 / 1024).toFixed(0)} KB`);
+    } catch (err) {
+      setTestState("error");
+      setTestMsg(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const labelStyle = { display: "block", fontSize: 12, fontWeight: 500, color: "#555", marginBottom: 2 };
+  const inputStyle = {
+    width: "100%", padding: "6px 8px", border: "1px solid #ddd", borderRadius: 6,
+    fontSize: 13, outline: "none", boxSizing: "border-box" as const,
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+      <label>
+        <span style={labelStyle}>API 端点（可选）</span>
+        <input style={inputStyle} value={config.apiEndpoint}
+          onChange={(e) => onUpdate(nodeId, { apiEndpoint: e.target.value })}
+          placeholder="默认: https://api.stability.ai/v2beta/stable-image/generate/core" />
+      </label>
+      <label>
+        <span style={labelStyle}>API Key</span>
+        <input style={inputStyle} type="password" value={config.apiKey}
+          onChange={(e) => onUpdate(nodeId, { apiKey: e.target.value })}
+          placeholder="Stability AI API Key" />
+      </label>
+
+      {/* ── Test connection ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <button
+          onClick={handleTest}
+          disabled={testState === "testing"}
+          style={{
+            padding: "6px 14px", borderRadius: 6, border: "1px solid",
+            borderColor: testState === "success" ? "#86efac" : testState === "error" ? "#fca5a5" : "#ddd",
+            background: testState === "success" ? "#f0fdf4" : testState === "error" ? "#fef2f2" : "#fff",
+            color: testState === "testing" ? "#aaa" : "#333",
+            fontSize: 12, fontWeight: 500, cursor: testState === "testing" ? "wait" : "pointer",
+            transition: "all 0.15s", whiteSpace: "nowrap",
+          }}
+        >
+          {testState === "testing" ? "⏳ 生成中…" : testState === "success" ? "✅ 已连通" : testState === "error" ? "❌ 失败" : "🔌 测试连通"}
+        </button>
+        {testMsg && (
+          <span style={{
+            fontSize: 11, lineHeight: 1.4, flex: 1,
+            color: testState === "success" ? "#16a34a" : testState === "error" ? "#dc2626" : "#888",
+          }}>
+            {testMsg}
+          </span>
+        )}
+      </div>
+
+      <label>
+        <span style={labelStyle}>提示词模板</span>
+        <textarea style={{ ...inputStyle, minHeight: 100, resize: "vertical", fontFamily: "inherit" }}
+          value={config.promptTemplate}
+          onChange={(e) => onUpdate(nodeId, { promptTemplate: e.target.value })}
+          placeholder="描述要生成的图片内容…" />
+        <span style={{ fontSize: 11, color: "#aaa", marginTop: 2, display: "block" }}>
+          变量：{`{{title}}`} {`{{summary}}`} {`{{source}}`} {`{{link}}`}
+        </span>
+      </label>
+      <label>
+        <span style={labelStyle}>反向提示词（可选）</span>
+        <textarea style={{ ...inputStyle, minHeight: 50, resize: "vertical", fontFamily: "inherit" }}
+          value={config.negativePrompt}
+          onChange={(e) => onUpdate(nodeId, { negativePrompt: e.target.value })}
+          placeholder="不希望出现的内容…" />
+      </label>
+      <div style={{ display: "flex", gap: "0.5rem" }}>
+        <label style={{ flex: 1 }}>
+          <span style={labelStyle}>输出格式</span>
+          <select style={{ ...inputStyle, cursor: "pointer" }}
+            value={config.outputFormat}
+            onChange={(e) => onUpdate(nodeId, { outputFormat: e.target.value })}>
+            <option value="png">PNG</option>
+            <option value="jpeg">JPEG</option>
+            <option value="webp">WebP</option>
+          </select>
+        </label>
+        <label style={{ width: 90 }}>
+          <span style={labelStyle}>宽度</span>
+          <input style={inputStyle} type="number" min={512} max={1536} step={64}
+            value={config.width}
+            onChange={(e) => onUpdate(nodeId, { width: parseInt(e.target.value) || 1024 })} />
+        </label>
+        <label style={{ width: 90 }}>
+          <span style={labelStyle}>高度</span>
+          <input style={inputStyle} type="number" min={512} max={1536} step={64}
+            value={config.height}
+            onChange={(e) => onUpdate(nodeId, { height: parseInt(e.target.value) || 1024 })} />
+        </label>
+      </div>
     </div>
   );
 }
