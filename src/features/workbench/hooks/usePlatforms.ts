@@ -1,34 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  configurePlatform,
   getPlatformConfigs,
   setPlatformEnabled,
   type PlatformConfig,
   type PlatformId,
 } from "../../../lib/tauri";
-import { nowText } from "../utils";
-
-export type XTwitterFormState = {
-  apiKey: string;
-  apiSecret: string;
-  accessToken: string;
-  accessTokenSecret: string;
-};
-
-const EMPTY_X_FORM: XTwitterFormState = {
-  apiKey: "",
-  apiSecret: "",
-  accessToken: "",
-  accessTokenSecret: "",
-};
 
 export function usePlatforms() {
   const [platformConfigs, setPlatformConfigs] = useState<PlatformConfig[]>([]);
   const [platformsLoading, setPlatformsLoading] = useState(false);
   const [platformsNotice, setPlatformsNotice] = useState("");
-  const [xTwitterForm, setXTwitterForm] = useState<XTwitterFormState>(EMPTY_X_FORM);
-  const [xTwitterSaving, setXTwitterSaving] = useState(false);
 
   const loadPlatforms = useCallback(async () => {
     setPlatformsLoading(true);
@@ -73,36 +55,6 @@ export function usePlatforms() {
     [platformConfigs],
   );
 
-  const saveXTwitterCredentials = useCallback(async () => {
-    if (!xTwitterForm.apiKey.trim() || !xTwitterForm.apiSecret.trim()) {
-      setPlatformsNotice("X API Key 和 API Secret 为必填项。");
-      return;
-    }
-    if (!xTwitterForm.accessToken.trim() || !xTwitterForm.accessTokenSecret.trim()) {
-      setPlatformsNotice("X Access Token 和 Access Token Secret 为必填项。");
-      return;
-    }
-
-    setXTwitterSaving(true);
-    setPlatformsNotice("");
-    try {
-      await configurePlatform("x_twitter", {
-        apiKey: xTwitterForm.apiKey.trim(),
-        apiSecret: xTwitterForm.apiSecret.trim(),
-        accessToken: xTwitterForm.accessToken.trim(),
-        accessTokenSecret: xTwitterForm.accessTokenSecret.trim(),
-      });
-      setXTwitterForm(EMPTY_X_FORM);
-      setPlatformsNotice(`X (Twitter) 凭证已保存（${nowText()}）`);
-      await loadPlatforms();
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      setPlatformsNotice(`保存 X 凭证失败：${msg}`);
-    } finally {
-      setXTwitterSaving(false);
-    }
-  }, [xTwitterForm, loadPlatforms]);
-
   const togglePlatformEnabled = useCallback(
     async (platformId: PlatformId, enabled: boolean) => {
       try {
@@ -125,10 +77,6 @@ export function usePlatforms() {
     isPlatformConfigured,
     isPlatformEnabled,
     loadPlatforms,
-    xTwitterForm,
-    setXTwitterForm,
-    xTwitterSaving,
-    saveXTwitterCredentials,
     togglePlatformEnabled,
   };
 }

@@ -173,21 +173,6 @@ export function ComposerPanel({
                 Binance Square
                 {!isPlatformConfigured("binance_square") && <em className="hint"> 未配置</em>}
               </label>
-              <label className="platform-option">
-                <input
-                  type="checkbox"
-                  checked={draft.targetPlatforms.includes("x_twitter")}
-                  disabled={!isPlatformConfigured("x_twitter")}
-                  onChange={(e) => {
-                    const next = e.target.checked
-                      ? [...draft.targetPlatforms, "x_twitter"]
-                      : draft.targetPlatforms.filter((p) => p !== "x_twitter");
-                    setDraft({ ...draft, targetPlatforms: next as Draft["targetPlatforms"] });
-                  }}
-                />
-                X (Twitter)
-                {!isPlatformConfigured("x_twitter") && <em className="hint"> 未配置</em>}
-              </label>
             </div>
             {draft.targetPlatforms.length === 0 && (
               <p className="hint warning">请至少选择一个发布平台。</p>
@@ -278,21 +263,6 @@ export function ComposerPanel({
                 />
                 Binance Square
                 {!isPlatformConfigured("binance_square") && <em className="hint"> 未配置</em>}
-              </label>
-              <label className="platform-option">
-                <input
-                  type="checkbox"
-                  checked={draft.targetPlatforms.includes("x_twitter")}
-                  disabled={!isPlatformConfigured("x_twitter")}
-                  onChange={(e) => {
-                    const next = e.target.checked
-                      ? [...draft.targetPlatforms, "x_twitter"]
-                      : draft.targetPlatforms.filter((p) => p !== "x_twitter");
-                    setDraft({ ...draft, targetPlatforms: next as Draft["targetPlatforms"] });
-                  }}
-                />
-                X (Twitter)
-                {!isPlatformConfigured("x_twitter") && <em className="hint"> 未配置</em>}
               </label>
             </div>
             {draft.targetPlatforms.length === 0 && (

@@ -1,6 +1,5 @@
 pub mod binance_square;
 pub mod store;
-pub mod x_twitter;
 
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -69,7 +68,6 @@ pub trait PublishPlatform: Send + Sync {
 pub fn build_platform(platform_id: &str) -> Box<dyn PublishPlatform> {
     match platform_id {
         "binance_square" => Box::new(binance_square::BinanceSquarePlatform),
-        "x_twitter" => Box::new(x_twitter::XTwitterPlatform),
         other => Box::new(UnknownPlatform(other.to_string())),
     }
 }
@@ -115,15 +113,31 @@ pub async fn publish_to_platforms(
         let adapter = build_platform(platform_id);
         let app_clone = app.clone();
         let req = request.clone();
-        let result = adapter.publish(&app_clone, &req);
+        let pid = platform_id.clone();
+        println!("[publish] 开始发布到平台: {}", platform_id);
+
+        // Run blocking publish on a dedicated OS thread to avoid
+        // "Cannot drop a runtime in an asynchronous context" panic
+        // caused by reqwest::blocking::Client inside tokio runtime.
+        let result = std::thread::spawn(move || {
+            adapter.publish(&app_clone, &req)
+        })
+        .join()
+        .map_err(|_| "发布线程异常退出".to_string())?;
 
         match result {
-            Ok(r) => results.push(r),
-            Err(e) => results.push(PublishResult {
-                platform: platform_id.clone(),
-                success: false,
-                message: e,
-            }),
+            Ok(r) => {
+                println!("[publish] 平台 {} 发布成功: {}", pid, r.message);
+                results.push(r);
+            },
+            Err(e) => {
+                println!("[publish] 平台 {} 发布失败: {}", pid, e);
+                results.push(PublishResult {
+                    platform: pid.clone(),
+                    success: false,
+                    message: e,
+                });
+            },
         }
     }
 

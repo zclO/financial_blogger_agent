@@ -1,5 +1,4 @@
 import type { BinanceSquareConfig, BinanceSquareProxyConfig, PlatformConfig, PlatformId } from "../../../lib/tauri";
-import type { XTwitterFormState } from "../hooks/usePlatforms";
 
 export function SettingsPanel({
   squareConfig,
@@ -23,10 +22,6 @@ export function SettingsPanel({
   onReloadProxy,
   platformConfigs,
   platformsNotice,
-  xTwitterForm,
-  setXTwitterForm,
-  xTwitterSaving,
-  onSaveXTwitter,
   onTogglePlatform,
 }: {
   squareConfig: BinanceSquareConfig | null;
@@ -50,10 +45,6 @@ export function SettingsPanel({
   onReloadProxy: () => void;
   platformConfigs: PlatformConfig[];
   platformsNotice: string;
-  xTwitterForm: XTwitterFormState;
-  setXTwitterForm: (fn: XTwitterFormState | ((prev: XTwitterFormState) => XTwitterFormState)) => void;
-  xTwitterSaving: boolean;
-  onSaveXTwitter: () => void;
   onTogglePlatform: (platformId: PlatformId, enabled: boolean) => void;
 }) {
   return (
@@ -140,86 +131,7 @@ export function SettingsPanel({
         <p className="hint">通过上方“Square OpenAPI Key”区域配置。</p>
       </div>
 
-      {/* ── X (Twitter) ── */}
-      <div className="platform-card">
-        <div className="platform-header">
-          <h3>X (Twitter)</h3>
-          <span className={isXTwitterConfigured(platformConfigs) ? "status ok" : "status"}>
-            {isXTwitterConfigured(platformConfigs) ? "已配置" : "未配置"}
-          </span>
-        </div>
-
-        {isXTwitterConfigured(platformConfigs) && (
-          <label className="inline">
-            <input
-              type="checkbox"
-              checked={isXTwitterEnabled(platformConfigs)}
-              onChange={(e) => onTogglePlatform("x_twitter", e.target.checked)}
-            />
-            启用 X (Twitter) 发布
-          </label>
-        )}
-
-        <label>
-          API Key
-          <input
-            type="password"
-            autoComplete="off"
-            value={xTwitterForm.apiKey}
-            onChange={(e) => setXTwitterForm((prev) => ({ ...prev, apiKey: e.target.value }))}
-            placeholder="X API Key (Consumer Key)"
-          />
-        </label>
-        <label>
-          API Secret
-          <input
-            type="password"
-            autoComplete="off"
-            value={xTwitterForm.apiSecret}
-            onChange={(e) => setXTwitterForm((prev) => ({ ...prev, apiSecret: e.target.value }))}
-            placeholder="X API Key Secret (Consumer Secret)"
-          />
-        </label>
-        <label>
-          Access Token
-          <input
-            type="password"
-            autoComplete="off"
-            value={xTwitterForm.accessToken}
-            onChange={(e) => setXTwitterForm((prev) => ({ ...prev, accessToken: e.target.value }))}
-            placeholder="X Access Token"
-          />
-        </label>
-        <label>
-          Access Token Secret
-          <input
-            type="password"
-            autoComplete="off"
-            value={xTwitterForm.accessTokenSecret}
-            onChange={(e) => setXTwitterForm((prev) => ({ ...prev, accessTokenSecret: e.target.value }))}
-            placeholder="X Access Token Secret"
-          />
-        </label>
-        <div className="actions">
-          <button disabled={xTwitterSaving} onClick={onSaveXTwitter}>
-            {xTwitterSaving ? "保存中..." : "保存 X 凭证"}
-          </button>
-        </div>
-      </div>
-
       {platformsNotice && <div className="subnotice">{platformsNotice}</div>}
     </section>
   );
-}
-
-function isXTwitterConfigured(configs: PlatformConfig[]): boolean {
-  const p = configs.find((c) => c.platform === "x_twitter");
-  if (!p) return false;
-  const keys = Object.keys(p.credentials);
-  return keys.length > 0 && keys.some((k) => p.credentials[k] !== "");
-}
-
-function isXTwitterEnabled(configs: PlatformConfig[]): boolean {
-  const p = configs.find((c) => c.platform === "x_twitter");
-  return p?.enabled ?? false;
 }

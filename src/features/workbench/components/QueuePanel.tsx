@@ -428,7 +428,6 @@ export function QueuePanel({
 function platformShortName(platformId: string): string {
   switch (platformId) {
     case "binance_square": return "Square";
-    case "x_twitter": return "X";
     default: return platformId;
   }
 }

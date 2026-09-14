@@ -556,10 +556,6 @@ export function App() {
             onReloadProxy={() => void square.loadProxyConfig()}
             platformConfigs={platforms.platformConfigs}
             platformsNotice={platforms.platformsNotice}
-            xTwitterForm={platforms.xTwitterForm}
-            setXTwitterForm={platforms.setXTwitterForm}
-            xTwitterSaving={platforms.xTwitterSaving}
-            onSaveXTwitter={() => void platforms.saveXTwitterCredentials()}
             onTogglePlatform={(platformId, enabled) => void platforms.togglePlatformEnabled(platformId, enabled)}
           />
         )}

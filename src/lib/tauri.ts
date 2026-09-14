@@ -349,7 +349,7 @@ export function savePublishQueue(store: PublishQueueStoreData): Promise<void> {
 
 // ── Multi-Platform Publishing ──
 
-export type PlatformId = "binance_square" | "x_twitter";
+export type PlatformId = "binance_square";
 
 export interface PlatformConfig {
   platform: PlatformId;
