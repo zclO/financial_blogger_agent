@@ -105,6 +105,7 @@ export function useNews(
           summary: article.summary || undefined,
           link: article.link || undefined,
         });
+        newTitles.push(article.title);
       }
       addedCount = newTopics.length;
       return newTopics.length > 0 ? [...newTopics, ...prev] : prev;
