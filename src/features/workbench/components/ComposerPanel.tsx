@@ -1,5 +1,5 @@
 import type { Draft } from "../types";
-import type { BinanceSymbolSearchItem, PlatformConfig, PlatformId } from "../../../lib/tauri";
+import type { BinanceSymbolSearchItem } from "../../../lib/tauri";
 
 export function ComposerPanel({
   draft,
@@ -18,8 +18,7 @@ export function ComposerPanel({
   chooseLocalVideoFile,
   composerError,
   onQueue,
-  platformConfigs,
-  isPlatformConfigured,
+  squareKeyConfigured,
 }: {
   draft: Draft;
   setDraft: (next: Draft | ((prev: Draft) => Draft)) => void;
@@ -37,8 +36,7 @@ export function ComposerPanel({
   chooseLocalVideoFile: () => void;
   composerError: string;
   onQueue: () => void;
-  platformConfigs: PlatformConfig[];
-  isPlatformConfigured: (platformId: PlatformId) => boolean;
+  squareKeyConfigured: boolean;
 }) {
   const addedSymbols = new Set(allSymbols);
   const bodyTagged = new Set(bodyTaggedSymbols);
@@ -162,7 +160,7 @@ export function ComposerPanel({
                 <input
                   type="checkbox"
                   checked={draft.targetPlatforms.includes("binance_square")}
-                  disabled={!isPlatformConfigured("binance_square")}
+                  disabled={!squareKeyConfigured}
                   onChange={(e) => {
                     const next = e.target.checked
                       ? [...draft.targetPlatforms, "binance_square"]
@@ -171,7 +169,7 @@ export function ComposerPanel({
                   }}
                 />
                 Binance Square
-                {!isPlatformConfigured("binance_square") && <em className="hint"> 未配置</em>}
+                {!squareKeyConfigured && <em className="hint"> 未配置</em>}
               </label>
             </div>
             {draft.targetPlatforms.length === 0 && (
@@ -253,7 +251,7 @@ export function ComposerPanel({
                 <input
                   type="checkbox"
                   checked={draft.targetPlatforms.includes("binance_square")}
-                  disabled={!isPlatformConfigured("binance_square")}
+                  disabled={!squareKeyConfigured}
                   onChange={(e) => {
                     const next = e.target.checked
                       ? [...draft.targetPlatforms, "binance_square"]
@@ -262,7 +260,7 @@ export function ComposerPanel({
                   }}
                 />
                 Binance Square
-                {!isPlatformConfigured("binance_square") && <em className="hint"> 未配置</em>}
+                {!squareKeyConfigured && <em className="hint"> 未配置</em>}
               </label>
             </div>
             {draft.targetPlatforms.length === 0 && (

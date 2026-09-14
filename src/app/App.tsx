@@ -478,8 +478,7 @@ export function App() {
             chooseLocalVideoFile={() => void workspace.chooseLocalVideoFile()}
             composerError={symbols.composerError}
             onQueue={handleQueue}
-            platformConfigs={platforms.platformConfigs}
-            isPlatformConfigured={platforms.isPlatformConfigured}
+            squareKeyConfigured={square.squareConfig?.keyConfigured ?? false}
           />
         )}
 
