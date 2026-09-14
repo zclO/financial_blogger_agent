@@ -355,7 +355,6 @@ export function AutoPublishPanel({
 function isPlatformConfigured(configs: PlatformConfig[], platformId: PlatformId): boolean {
   const p = configs.find((c) => c.platform === platformId);
   if (!p) return false;
-  if (!p.enabled) return false;
   const keys = Object.keys(p.credentials);
   return keys.length > 0 && keys.some((k) => p.credentials[k] !== "");
 }

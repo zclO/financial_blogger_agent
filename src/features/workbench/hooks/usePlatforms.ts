@@ -58,8 +58,7 @@ export function usePlatforms() {
     (platformId: PlatformId): boolean => {
       const p = platformConfigs.find((c) => c.platform === platformId);
       if (!p) return false;
-      if (!p.enabled) return false;
-      // Check if credentials are non-empty
+      // Check if credentials are non-empty (enabled state is separate)
       const credKeys = Object.keys(p.credentials);
       return credKeys.length > 0 && credKeys.some((k) => p.credentials[k] !== "");
     },

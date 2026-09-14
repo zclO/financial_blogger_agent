@@ -261,7 +261,7 @@ export function App() {
       const anyPlatformConfigured = targetPlatforms.some((pid) => {
         if (pid === "binance_square") return squareConfigRef.current?.keyConfigured ?? false;
         const pc = platformConfigsRef.current.find((p) => p.platform === pid);
-        if (!pc || !pc.enabled) return false;
+        if (!pc) return false;
         const keys = Object.keys(pc.credentials);
         return keys.length > 0 && keys.some((k) => pc.credentials[k] !== "");
       });
