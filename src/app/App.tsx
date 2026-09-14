@@ -181,68 +181,82 @@ export function App() {
           link: a.link,
         }));
 
-        // ── Step 3: Run pipeline ──
+        // ── Step 3: Run pipeline (strictly 1 article per tick to match publish rate) ──
         const pipelineId = currentAP.pipelineId;
         const pl = pipelineId
           ? savedPipelinesRef.current.find((p) => p.id === pipelineId)
           : null;
 
+        // Sort new topics by source priority (lower index = higher priority)
+        const priority = currentAP.sourcePriority;
+        const sortedTopics = [...newTopics].sort((a, b) => {
+          const srcA = a.source.replace(/（RSS）$/, "");
+          const srcB = b.source.replace(/（RSS）$/, "");
+          const idxA = priority.indexOf(srcA);
+          const idxB = priority.indexOf(srcB);
+          const rankA = idxA >= 0 ? idxA : priority.length;
+          const rankB = idxB >= 0 ? idxB : priority.length;
+          return rankA - rankB;
+        });
+
+        // Only process the top-priority article this tick
+        const topic = sortedTopics[0];
         let queuedCount = 0;
         let processedCount = 0;
         const newlyQueuedIds: string[] = [];
 
-        for (const topic of newTopics) {
-          if (pl) {
-            try {
-              const results = await runSavedPipelineRef.current(pl.id, topic);
-              const processed = results[0]?.processedContent;
-              if (processed && processed.length > 0) {
-                processedCount++;
-                const autoDraft: Draft = {
-                  title: topic.title,
-                  body: topic.title,
-                  reviewed: true,
-                  queued: true,
-                  publishType: "post",
-                  videoSourceType: "url",
-                  videoUrl: "",
-                  videoFilePath: "",
-                  targetPlatforms: currentAP.targetPlatforms,
-                  imageBase64: results[0]?.generatedImage,
-                  imageMime: results[0]?.generatedImageMime,
-                  imageName: results[0]?.generatedImageName,
-                };
-                const entryId = addToQueueRef.current(autoDraft, processed, [], topic.source.replace(/（RSS）$/, ""));
-                if (entryId) newlyQueuedIds.push(entryId);
-                queuedCount++;
-              } else {
-                appendQueueLogRef.current(`自动发布：流水线处理「${topic.title}」无输出，跳过。`);
-              }
-            } catch {
-              appendQueueLogRef.current(`自动发布：流水线处理「${topic.title}」失败，跳过。`);
+        if (pl) {
+          try {
+            const results = await runSavedPipelineRef.current(pl.id, topic);
+            const processed = results[0]?.processedContent;
+            if (processed && processed.length > 0) {
+              processedCount++;
+              const autoDraft: Draft = {
+                title: topic.title,
+                body: topic.title,
+                reviewed: true,
+                queued: true,
+                publishType: "post",
+                videoSourceType: "url",
+                videoUrl: "",
+                videoFilePath: "",
+                targetPlatforms: currentAP.targetPlatforms,
+                imageBase64: results[0]?.generatedImage,
+                imageMime: results[0]?.generatedImageMime,
+                imageName: results[0]?.generatedImageName,
+              };
+              const entryId = addToQueueRef.current(autoDraft, processed, [], topic.source.replace(/（RSS）$/, ""));
+              if (entryId) newlyQueuedIds.push(entryId);
+              queuedCount++;
+            } else {
+              appendQueueLogRef.current(`自动发布：流水线处理「${topic.title}」无输出，跳过。`);
             }
-          } else {
-            // No pipeline configured — queue raw article content
-            const autoDraft: Draft = {
-              title: topic.title,
-              body: topic.summary || topic.title,
-              reviewed: true,
-              queued: true,
-              publishType: "post",
-              videoSourceType: "url",
-              videoUrl: "",
-              videoFilePath: "",
-              targetPlatforms: currentAP.targetPlatforms,
-            };
-            const entryId = addToQueueRef.current(autoDraft, topic.summary || topic.title, [], topic.source.replace(/（RSS）$/, ""));
-            if (entryId) newlyQueuedIds.push(entryId);
-            queuedCount++;
+          } catch {
+            appendQueueLogRef.current(`自动发布：流水线处理「${topic.title}」失败，跳过。`);
           }
+        } else {
+          // No pipeline configured — queue raw article content
+          const autoDraft: Draft = {
+            title: topic.title,
+            body: topic.summary || topic.title,
+            reviewed: true,
+            queued: true,
+            publishType: "post",
+            videoSourceType: "url",
+            videoUrl: "",
+            videoFilePath: "",
+            targetPlatforms: currentAP.targetPlatforms,
+          };
+          const entryId = addToQueueRef.current(autoDraft, topic.summary || topic.title, [], topic.source.replace(/（RSS）$/, ""));
+          if (entryId) newlyQueuedIds.push(entryId);
+          queuedCount++;
         }
 
         const pipelineLabel = pl ? `使用流水线「${pl.name}」` : "无流水线";
+        const skippedCount = newArticles.length - 1;
+        const skipNote = skippedCount > 0 ? `，其余 ${skippedCount} 篇已导入选题池待人工处理` : "";
         appendQueueLogRef.current(
-          `自动发布：抓取 ${newArticles.length} 篇新文章，${pipelineLabel}处理 ${processedCount} 篇，入队 ${queuedCount} 篇。`,
+          `自动发布：抓取 ${newArticles.length} 篇新文章，${pipelineLabel}处理 1 篇（来源：${topic.source.replace(/（RSS）$/, "")}），入队 ${queuedCount} 篇${skipNote}。`,
         );
       } else {
         appendQueueLogRef.current(`自动发布：抓取到 ${articles.length} 篇文章，均为已知内容，跳过抓取。`);
