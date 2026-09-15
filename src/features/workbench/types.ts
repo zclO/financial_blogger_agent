@@ -92,7 +92,7 @@ export type NewsFetchResult = {
 
 // ── Pipeline types ──
 
-export type PipelineNodeKind = "source" | "llm" | "image";
+export type PipelineNodeKind = "source" | "llm" | "image" | "image_cf";
 
 export type SourceNodeConfig = {
   /** 选中的新闻源 ID 列表，空数组表示全部 */
@@ -119,6 +119,15 @@ export type ImageNodeConfig = {
   height: number;
 };
 
+export type ImageCfNodeConfig = {
+  apiEndpoint: string;
+  apiToken: string;
+  promptTemplate: string;
+  steps: number;
+  width: number;
+  height: number;
+};
+
 export type PipelineNode = {
   id: string;
   kind: PipelineNodeKind;
@@ -127,6 +136,7 @@ export type PipelineNode = {
   sourceConfig?: SourceNodeConfig;
   llmConfig?: LlmNodeConfig;
   imageConfig?: ImageNodeConfig;
+  imageCfConfig?: ImageCfNodeConfig;
 };
 
 export type ProcessedArticle = {

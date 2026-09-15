@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   callLlm,
   generateImage,
+  generateImageCf,
   loadArticleLogStore,
   loadPipelines,
   saveArticleLogStore,
@@ -19,6 +20,7 @@ import {
 } from "../constants";
 import type {
   FlowEdge,
+  ImageCfNodeConfig,
   ImageNodeConfig,
   LlmNodeConfig,
   PipelineNode,
@@ -51,6 +53,17 @@ function defaultImageConfig(): ImageNodeConfig {
     promptTemplate: DEFAULT_IMAGE_PROMPT,
     negativePrompt: DEFAULT_IMAGE_NEGATIVE_PROMPT,
     outputFormat: "png",
+    width: 1024,
+    height: 1024,
+  };
+}
+
+function defaultImageCfConfig(): ImageCfNodeConfig {
+  return {
+    apiEndpoint: "",
+    apiToken: "",
+    promptTemplate: DEFAULT_IMAGE_PROMPT,
+    steps: 25,
     width: 1024,
     height: 1024,
   };
@@ -252,6 +265,51 @@ async function executePipeline(
         const msg = err instanceof Error ? err.message : String(err);
         appendLog(`  \u2192 \u5931\u8D25: ${msg}`);
         appendLog(`\u274C \u300C${node.name}\u300D\u914D\u56FE\u5931\u8D25\uFF0C\u6CBF\u7528\u539F\u59CB\u6570\u636E\u3002`);
+        nodeOutputs.set(nodeId, input);
+        anyNodeFailed = true;
+      }
+    } else if (node.kind === "image_cf") {
+      const config = node.imageCfConfig;
+      if (!config || !config.apiToken) {
+        appendLog(`\u26A0\uFE0F \u300C${node.name}\u300D\u672A\u914D\u7F6E Cloudflare API Token\uFF0C\u8DF3\u8FC7\u3002`);
+        nodeOutputs.set(nodeId, input);
+        continue;
+      }
+      if (!config.apiEndpoint) {
+        appendLog(`\u26A0\uFE0F \u300C${node.name}\u300D\u672A\u914D\u7F6E API \u7AEF\u70B9\uFF0C\u8DF3\u8FC7\u3002`);
+        nodeOutputs.set(nodeId, input);
+        continue;
+      }
+      appendLog(`\u26A1 \u300C${node.name}\u300D\u6B63\u5728\u901A\u8FC7 Cloudflare Workers AI \u751F\u6210\u914D\u56FE\u2026`);
+
+      const prompt = config.promptTemplate
+        .replace(/\{\{title\}\}/g, input.originalTitle)
+        .replace(/\{\{summary\}\}/g, input.processedContent)
+        .replace(/\{\{source\}\}/g, input.sourceName)
+        .replace(/\{\{link\}\}/g, input.link);
+
+      try {
+        const resp = await generateImageCf({
+          apiToken: config.apiToken,
+          apiEndpoint: config.apiEndpoint,
+          prompt,
+          steps: config.steps || 25,
+          width: config.width || 1024,
+          height: config.height || 1024,
+        });
+        const sizeKB = (resp.imageBase64.length * 0.75 / 1024).toFixed(0);
+        appendLog(`  \u2192 \u751F\u6210\u56FE\u7247 ${resp.fileName} \u00B7 ${sizeKB} KB`);
+        nodeOutputs.set(nodeId, {
+          ...input,
+          generatedImage: resp.imageBase64,
+          generatedImageName: resp.fileName,
+          generatedImageMime: resp.mimeType,
+        });
+        appendLog(`\u2705 \u300C${node.name}\u300DCloudflare \u914D\u56FE\u751F\u6210\u5B8C\u6210\u3002`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appendLog(`  \u2192 \u5931\u8D25: ${msg}`);
+        appendLog(`\u274C \u300C${node.name}\u300DCloudflare \u914D\u56FE\u5931\u8D25\uFF0C\u6CBF\u7528\u539F\u59CB\u6570\u636E\u3002`);
         nodeOutputs.set(nodeId, input);
         anyNodeFailed = true;
       }
@@ -531,7 +589,7 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
   const addNode = useCallback(
     (kind: PipelineNodeKind, position: { x: number; y: number }) => {
       const id = `node-${++nextId}`;
-      const name = kind === "source" ? "\u4FE1\u606F\u6E90" : kind === "llm" ? "\u5927\u6A21\u578B" : "\u914D\u56FE\u751F\u6210";
+      const name = kind === "source" ? "\u4FE1\u606F\u6E90" : kind === "llm" ? "\u5927\u6A21\u578B" : kind === "image" ? "\u914D\u56FE\u751F\u6210" : "CF \u914D\u56FE";
       const node: PipelineNode = {
         id,
         kind,
@@ -539,6 +597,7 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
         position,
         ...(kind === "llm" ? { llmConfig: defaultLlmConfig() } : {}),
         ...(kind === "image" ? { imageConfig: defaultImageConfig() } : {}),
+        ...(kind === "image_cf" ? { imageCfConfig: defaultImageCfConfig() } : {}),
       };
       setNodes((prev) => [...prev, node]);
       setSelectedNodeId(id);
@@ -606,6 +665,32 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
                   width: 1024,
                   height: 1024,
                   ...n.imageConfig,
+                  ...config,
+                },
+              }
+            : n,
+        ),
+      );
+      setDirty(true);
+    },
+    [],
+  );
+
+  const updateImageCfConfig = useCallback(
+    (nodeId: string, config: Partial<ImageCfNodeConfig>) => {
+      setNodes((prev) =>
+        prev.map((n) =>
+          n.id === nodeId
+            ? {
+                ...n,
+                imageCfConfig: {
+                  apiEndpoint: "",
+                  apiToken: "",
+                  promptTemplate: "",
+                  steps: 25,
+                  width: 1024,
+                  height: 1024,
+                  ...n.imageCfConfig,
                   ...config,
                 },
               }
@@ -807,6 +892,7 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
     updateNodePosition,
     updateLlmConfig,
     updateImageConfig,
+    updateImageCfConfig,
     addEdge,
     removeEdge,
     // Execution

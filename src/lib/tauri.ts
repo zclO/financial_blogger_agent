@@ -164,6 +164,21 @@ export function generateImage(request: ImageGenRequest): Promise<ImageGenRespons
   return invoke<ImageGenResponse>("generate_image", { request });
 }
 
+// ── Cloudflare Workers AI Image Generation ──
+
+export interface ImageGenCfRequest {
+  apiToken: string;
+  apiEndpoint: string;
+  prompt: string;
+  steps?: number;
+  width?: number;
+  height?: number;
+}
+
+export function generateImageCf(request: ImageGenCfRequest): Promise<ImageGenResponse> {
+  return invoke<ImageGenResponse>("generate_image_cf", { request });
+}
+
 // ── Pipeline Store ──
 
 export interface StoredPipelineNode {
@@ -187,6 +202,14 @@ export interface StoredPipelineNode {
     promptTemplate: string;
     negativePrompt: string;
     outputFormat: string;
+    width: number;
+    height: number;
+  };
+  imageCfConfig?: {
+    apiEndpoint: string;
+    apiToken: string;
+    promptTemplate: string;
+    steps: number;
     width: number;
     height: number;
   };

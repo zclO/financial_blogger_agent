@@ -13,8 +13,9 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { callLlm, generateImage } from "../../../lib/tauri";
+import { callLlm, generateImage, generateImageCf } from "../../../lib/tauri";
 import type {
+  ImageCfNodeConfig,
   ImageNodeConfig,
   LlmNodeConfig,
   PipelineNode,
@@ -51,6 +52,7 @@ export function PipelinePanel({
   onUpdateNodePosition,
   onUpdateLlmConfig,
   onUpdateImageConfig,
+  onUpdateImageCfConfig,
   onAddEdge,
   onRemoveEdge,
   onCreatePipeline,
@@ -82,6 +84,7 @@ export function PipelinePanel({
   onUpdateNodePosition: (id: string, pos: { x: number; y: number }) => void;
   onUpdateLlmConfig: (nodeId: string, config: Partial<LlmNodeConfig>) => void;
   onUpdateImageConfig: (nodeId: string, config: Partial<ImageNodeConfig>) => void;
+  onUpdateImageCfConfig: (nodeId: string, config: Partial<ImageCfNodeConfig>) => void;
   onAddEdge: (source: string, target: string) => void;
   onRemoveEdge: (edgeId: string) => void;
   onCreatePipeline: (name: string) => string;
@@ -115,6 +118,7 @@ export function PipelinePanel({
         onUpdateNodePosition={onUpdateNodePosition}
         onUpdateLlmConfig={onUpdateLlmConfig}
         onUpdateImageConfig={onUpdateImageConfig}
+        onUpdateImageCfConfig={onUpdateImageCfConfig}
         onAddEdge={onAddEdge}
         onRemoveEdge={onRemoveEdge}
         onSavePipeline={onSavePipeline}
@@ -374,6 +378,7 @@ function PipelineEditor({
   onUpdateNodePosition,
   onUpdateLlmConfig,
   onUpdateImageConfig,
+  onUpdateImageCfConfig,
   onAddEdge,
   onRemoveEdge,
   onSavePipeline,
@@ -395,6 +400,7 @@ function PipelineEditor({
   onUpdateNodePosition: (id: string, pos: { x: number; y: number }) => void;
   onUpdateLlmConfig: (nodeId: string, config: Partial<LlmNodeConfig>) => void;
   onUpdateImageConfig: (nodeId: string, config: Partial<ImageNodeConfig>) => void;
+  onUpdateImageCfConfig: (nodeId: string, config: Partial<ImageCfNodeConfig>) => void;
   onAddEdge: (source: string, target: string) => void;
   onRemoveEdge: (edgeId: string) => void;
   onSavePipeline: () => void;
@@ -580,6 +586,10 @@ function PipelineEditor({
             icon="🖼️" label="配图生成" desc="AI 配图"
             color="#f59e0b" onClick={() => handleAddNode("image")}
           />
+          <PaletteButton
+            icon="⚡" label="CF 配图" desc="Cloudflare FLUX"
+            color="#f97316" onClick={() => handleAddNode("image_cf")}
+          />
           <div style={{ marginTop: "1rem", fontSize: 11, color: "#aaa", lineHeight: 1.5 }}>
             点击添加节点到画布。拖动端口创建连线。右键可快速添加。
           </div>
@@ -633,6 +643,8 @@ function PipelineEditor({
                     onClick={() => handleAddNodeAt("llm")} />
                   <CtxItem icon="🖼️" label="添加配图生成"
                     onClick={() => handleAddNodeAt("image")} />
+                  <CtxItem icon="⚡" label="添加 CF 配图"
+                    onClick={() => handleAddNodeAt("image_cf")} />
                 </>
               )}
             </ContextMenu>
@@ -651,7 +663,7 @@ function PipelineEditor({
                 marginBottom: "0.75rem",
               }}>
                 <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
-                  {selectedNode.kind === "source" ? "📰" : selectedNode.kind === "llm" ? "🤖" : "🖼️"} {selectedNode.name}
+                  {selectedNode.kind === "source" ? "📰" : selectedNode.kind === "llm" ? "🤖" : selectedNode.kind === "image_cf" ? "⚡" : "🖼️"} {selectedNode.name}
                 </h3>
                 <button
                   onClick={() => onRemoveNode(selectedNode.id)}
@@ -740,6 +752,21 @@ function PipelineEditor({
                     height: 1024,
                   }}
                   onUpdate={onUpdateImageConfig}
+                />
+              )}
+
+              {selectedNode.kind === "image_cf" && (
+                <ImageCfConfigEditor
+                  nodeId={selectedNode.id}
+                  config={selectedNode.imageCfConfig ?? {
+                    apiEndpoint: "",
+                    apiToken: "",
+                    promptTemplate: "",
+                    steps: 25,
+                    width: 1024,
+                    height: 1024,
+                  }}
+                  onUpdate={onUpdateImageCfConfig}
                 />
               )}
             </div>
@@ -1148,6 +1175,132 @@ function ImageConfigEditor({
             <option value="jpeg">JPEG</option>
             <option value="webp">WebP</option>
           </select>
+        </label>
+        <label style={{ width: 90 }}>
+          <span style={labelStyle}>宽度</span>
+          <input style={inputStyle} type="number" min={512} max={1536} step={64}
+            value={config.width}
+            onChange={(e) => onUpdate(nodeId, { width: parseInt(e.target.value) || 1024 })} />
+        </label>
+        <label style={{ width: 90 }}>
+          <span style={labelStyle}>高度</span>
+          <input style={inputStyle} type="number" min={512} max={1536} step={64}
+            value={config.height}
+            onChange={(e) => onUpdate(nodeId, { height: parseInt(e.target.value) || 1024 })} />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function ImageCfConfigEditor({
+  nodeId, config, onUpdate,
+}: {
+  nodeId: string;
+  config: ImageCfNodeConfig;
+  onUpdate: (nodeId: string, config: Partial<ImageCfNodeConfig>) => void;
+}) {
+  const [testState, setTestState] = useState<"idle" | "testing" | "success" | "error">("idle");
+  const [testMsg, setTestMsg] = useState("");
+
+  const handleTest = async () => {
+    if (!config.apiToken) {
+      setTestState("error");
+      setTestMsg("请先填写 Cloudflare API Token。");
+      return;
+    }
+    if (!config.apiEndpoint.trim()) {
+      setTestState("error");
+      setTestMsg("请先填写 API 端点 URL。");
+      return;
+    }
+    if (!config.promptTemplate.trim()) {
+      setTestState("error");
+      setTestMsg("请先填写提示词模板。");
+      return;
+    }
+    setTestState("testing");
+    setTestMsg("");
+    try {
+      const resp = await generateImageCf({
+        apiToken: config.apiToken,
+        apiEndpoint: config.apiEndpoint,
+        prompt: "A cute orange tabby cat sitting on a windowsill, warm sunlight",
+        steps: config.steps || 25,
+        width: config.width || 1024,
+        height: config.height || 1024,
+      });
+      setTestState("success");
+      setTestMsg(`连通成功 · ${resp.fileName} · ${(resp.imageBase64.length * 0.75 / 1024).toFixed(0)} KB`);
+    } catch (err) {
+      setTestState("error");
+      setTestMsg(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const labelStyle = { display: "block", fontSize: 12, fontWeight: 500, color: "#555", marginBottom: 2 };
+  const inputStyle = {
+    width: "100%", padding: "6px 8px", border: "1px solid #ddd", borderRadius: 6,
+    fontSize: 13, outline: "none", boxSizing: "border-box" as const,
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+      <label>
+        <span style={labelStyle}>API 端点</span>
+        <input style={inputStyle} value={config.apiEndpoint}
+          onChange={(e) => onUpdate(nodeId, { apiEndpoint: e.target.value })}
+          placeholder="https://api.cloudflare.com/client/v4/accounts/{id}/ai/run/@cf/black-forest-labs/flux-2-dev" />
+      </label>
+      <label>
+        <span style={labelStyle}>API Token</span>
+        <input style={inputStyle} type="password" value={config.apiToken}
+          onChange={(e) => onUpdate(nodeId, { apiToken: e.target.value })}
+          placeholder="Cloudflare API Token" />
+      </label>
+
+      {/* ── Test connection ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <button
+          onClick={handleTest}
+          disabled={testState === "testing"}
+          style={{
+            padding: "6px 14px", borderRadius: 6, border: "1px solid",
+            borderColor: testState === "success" ? "#86efac" : testState === "error" ? "#fca5a5" : "#ddd",
+            background: testState === "success" ? "#f0fdf4" : testState === "error" ? "#fef2f2" : "#fff",
+            color: testState === "testing" ? "#aaa" : "#333",
+            fontSize: 12, fontWeight: 500, cursor: testState === "testing" ? "wait" : "pointer",
+            transition: "all 0.15s", whiteSpace: "nowrap",
+          }}
+        >
+          {testState === "testing" ? "⏳ 生成中…" : testState === "success" ? "✅ 已连通" : testState === "error" ? "❌ 失败" : "🔌 测试连通"}
+        </button>
+        {testMsg && (
+          <span style={{
+            fontSize: 11, lineHeight: 1.4, flex: 1,
+            color: testState === "success" ? "#16a34a" : testState === "error" ? "#dc2626" : "#888",
+          }}>
+            {testMsg}
+          </span>
+        )}
+      </div>
+
+      <label>
+        <span style={labelStyle}>提示词模板</span>
+        <textarea style={{ ...inputStyle, minHeight: 100, resize: "vertical", fontFamily: "inherit" }}
+          value={config.promptTemplate}
+          onChange={(e) => onUpdate(nodeId, { promptTemplate: e.target.value })}
+          placeholder="描述要生成的图片内容…" />
+        <span style={{ fontSize: 11, color: "#aaa", marginTop: 2, display: "block" }}>
+          变量：{`{{title}}`} {`{{summary}}`} {`{{source}}`} {`{{link}}`}
+        </span>
+      </label>
+      <div style={{ display: "flex", gap: "0.5rem" }}>
+        <label style={{ width: 80 }}>
+          <span style={labelStyle}>步数</span>
+          <input style={inputStyle} type="number" min={1} max={50} step={1}
+            value={config.steps}
+            onChange={(e) => onUpdate(nodeId, { steps: parseInt(e.target.value) || 25 })} />
         </label>
         <label style={{ width: 90 }}>
           <span style={labelStyle}>宽度</span>

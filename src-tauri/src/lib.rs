@@ -41,6 +41,7 @@ pub fn run() {
             pipeline::call_llm,
             // image generation
             image_gen::generate_image,
+            image_gen::generate_image_cf,
             // pipeline store
             pipeline_store::load_pipelines,
             pipeline_store::save_pipelines,

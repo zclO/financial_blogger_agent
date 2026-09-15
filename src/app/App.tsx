@@ -455,6 +455,7 @@ export function App() {
             onUpdateNodePosition={pipeline.updateNodePosition}
             onUpdateLlmConfig={pipeline.updateLlmConfig}
             onUpdateImageConfig={pipeline.updateImageConfig}
+            onUpdateImageCfConfig={pipeline.updateImageCfConfig}
             onAddEdge={pipeline.addEdge}
             onRemoveEdge={pipeline.removeEdge}
             onCreatePipeline={pipeline.createPipeline}
