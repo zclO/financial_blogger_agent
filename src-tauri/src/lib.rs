@@ -22,6 +22,7 @@ pub fn run() {
             workspace::get_app_info,
             workspace::load_workspace,
             workspace::save_workspace,
+            workspace::pick_image_file,
             // binance square
             binance::get_binance_square_config,
             binance::configure_binance_square,

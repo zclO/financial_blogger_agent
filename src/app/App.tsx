@@ -493,6 +493,8 @@ export function App() {
             composerError={symbols.composerError}
             onQueue={handleQueue}
             squareKeyConfigured={square.squareConfig?.keyConfigured ?? false}
+            onUploadImage={() => void workspace.uploadImage()}
+            finalBody={finalPublishBody}
           />
         )}
 

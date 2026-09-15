@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 use tauri::{AppHandle, Manager};
+use tauri_plugin_dialog::DialogExt;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -86,4 +87,53 @@ pub fn save_workspace(app: AppHandle, workspace: Workspace) -> Result<(), String
         serde_json::to_vec_pretty(&workspace).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PickedImage {
+    pub base64: String,
+    pub mime: String,
+    pub name: String,
+}
+
+#[tauri::command]
+pub fn pick_image_file(app: AppHandle) -> Result<Option<PickedImage>, String> {
+    let file = app
+        .dialog()
+        .file()
+        .add_filter("Image", &["png", "jpg", "jpeg", "webp", "gif"])
+        .blocking_pick_file();
+
+    let path = match file {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    let path_buf = PathBuf::from(path.as_path().ok_or("invalid path")?);
+    let data = fs::read(&path_buf).map_err(|e| e.to_string())?;
+    let name = path_buf
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "image".into());
+
+    let ext = path_buf
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        _ => "image/png",
+    };
+
+    let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &data);
+
+    Ok(Some(PickedImage {
+        base64: b64,
+        mime: mime.into(),
+        name,
+    }))
 }

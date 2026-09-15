@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Draft } from "../types";
 import type { BinanceSymbolSearchItem } from "../../../lib/tauri";
 
@@ -19,6 +20,8 @@ export function ComposerPanel({
   composerError,
   onQueue,
   squareKeyConfigured,
+  onUploadImage,
+  finalBody,
 }: {
   draft: Draft;
   setDraft: (next: Draft | ((prev: Draft) => Draft)) => void;
@@ -37,13 +40,24 @@ export function ComposerPanel({
   composerError: string;
   onQueue: () => void;
   squareKeyConfigured: boolean;
+  onUploadImage: () => void;
+  finalBody: string;
 }) {
+  const [showPreview, setShowPreview] = useState(false);
   const addedSymbols = new Set(allSymbols);
   const bodyTagged = new Set(bodyTaggedSymbols);
 
   return (
+    <>
     <section className="panel composer-panel">
-      <h2>内容编辑</h2>
+      <div className="composer-header">
+        <h2>内容编辑</h2>
+        <div className="composer-header-actions">
+          <button type="button" className="ghost" onClick={() => setShowPreview(true)}>
+            预览
+          </button>
+        </div>
+      </div>
 
       <div className="segment">
         <SegmentButton
@@ -148,6 +162,16 @@ export function ComposerPanel({
                 </button>
               </div>
               <p className="hint">{draft.imageName ?? "生成的配图"}</p>
+            </div>
+          )}
+
+          {/* Upload image button */}
+          {!draft.imageBase64 && (
+            <div style={{ marginTop: "0.75rem" }}>
+              <button type="button" className="ghost" onClick={onUploadImage}>
+                上传配图
+              </button>
+              <p className="hint">支持 PNG、JPG、WebP、GIF 格式</p>
             </div>
           )}
         </div>
@@ -289,6 +313,47 @@ export function ComposerPanel({
         </div>
       </div>
     </section>
+
+    {/* Preview Modal */}
+    {showPreview && (
+      <div className="modal-overlay" onClick={() => setShowPreview(false)}>
+        <div className="modal-content preview-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h2>内容预览</h2>
+            <button type="button" className="ghost" onClick={() => setShowPreview(false)}>
+              关闭
+            </button>
+          </div>
+          <div className="preview-body">
+            {draft.title && <h3 className="preview-title">{draft.title}</h3>}
+            <div className="preview-meta">
+              <span className="preview-type">{draft.publishType === "post" ? "帖子" : draft.publishType === "article" ? "文章" : "视频"}</span>
+              <span className="preview-platforms">
+                {draft.targetPlatforms.map((p) => (p === "binance_square" ? "Binance Square" : p)).join(", ")}
+              </span>
+            </div>
+            <div className="preview-text">{finalBody}</div>
+            {draft.imageBase64 && (
+              <div className="preview-image">
+                <img
+                  src={`data:${draft.imageMime ?? "image/png"};base64,${draft.imageBase64}`}
+                  alt={draft.imageName ?? "配图"}
+                />
+              </div>
+            )}
+            {allSymbols.length > 0 && (
+              <div className="preview-symbols">
+                {allSymbols.map((s) => (
+                  <span key={s} className="tag-chip">#{s}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    </>
   );
 }
 

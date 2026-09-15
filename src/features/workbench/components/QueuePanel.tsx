@@ -275,6 +275,7 @@ export function QueuePanel({
                   {entry.symbols.length > 3 && ` +${entry.symbols.length - 3}`}
                 </span>
               )}
+              {entry.imageBase64 && <span className="queue-item-image-badge">🖼 配图</span>}
             </div>
           </div>
         ))}
@@ -298,6 +299,18 @@ export function QueuePanel({
             <div className="kv">
               <span className="key">新闻来源</span>
               <span className="value">{selectedEntry.sourceName}</span>
+            </div>
+          )}
+          {selectedEntry.imageBase64 && (
+            <div className="kv queue-image-preview">
+              <span className="key">配图</span>
+              <div className="value">
+                <img
+                  src={`data:${selectedEntry.imageMime ?? "image/png"};base64,${selectedEntry.imageBase64}`}
+                  alt={selectedEntry.imageName ?? "配图"}
+                />
+                {selectedEntry.imageName && <small>{selectedEntry.imageName}</small>}
+              </div>
             </div>
           )}
           {selectedEntry.publishType === "video" && selectedEntry.videoSourceType === "url" && (

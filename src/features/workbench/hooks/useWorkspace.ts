@@ -1,7 +1,7 @@
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState } from "react";
 
-import { loadTopicStore, saveTopicStore, type PlatformId } from "../../../lib/tauri";
+import { loadTopicStore, saveTopicStore, pickImageFile, type PlatformId } from "../../../lib/tauri";
 import { DEFAULT_DRAFT_BODY, DEFAULT_TOPICS } from "../constants";
 import type { Draft, NewsArticle, Tab, Topic } from "../types";
 
@@ -172,6 +172,23 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
     }
   };
 
+  const uploadImage = async () => {
+    try {
+      const picked = await pickImageFile();
+      if (picked) {
+        setDraft((prev) => ({
+          ...prev,
+          imageBase64: picked.base64,
+          imageMime: picked.mime,
+          imageName: picked.name,
+        }));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setNotice(`上传图片失败：${message}`);
+    }
+  };
+
   return {
     topics,
     setTopics,
@@ -189,5 +206,6 @@ export function useWorkspace(setNotice: (msg: string) => void, setTab: (tab: Tab
     validateDraftForQueue,
     queueDraft,
     chooseLocalVideoFile,
+    uploadImage,
   };
 }

@@ -71,8 +71,28 @@ impl PublishPlatform for BinanceSquarePlatform {
                 }
             }
             run_square_script(app, "post-video.mjs", &args)?
+        } else if image_path.is_some() {
+            // Image post or article with image — use post-image.mjs
+            let mut args = vec!["--text".to_string(), req.text.clone()];
+            let is_article = req.content_type == "article";
+            if is_article {
+                // Article with cover image
+                if let Some(ref t) = req.title {
+                    if !t.trim().is_empty() {
+                        args.push("--title".to_string());
+                        args.push(t.trim().to_string());
+                    }
+                }
+                args.push("--cover".to_string());
+                args.push(image_path.as_ref().unwrap().clone());
+            } else {
+                // Short image post (no title — title would switch to article mode)
+                args.push("--images".to_string());
+                args.push(image_path.as_ref().unwrap().clone());
+            }
+            run_square_script(app, "post-image.mjs", &args)?
         } else {
-            // Text or video with URL (possibly with image)
+            // Text-only or video with URL (no image)
             let mut args = vec!["--text".to_string(), req.text.clone()];
             if !req.content_type.is_empty() {
                 args.push("--contentType".to_string());
@@ -89,10 +109,6 @@ impl PublishPlatform for BinanceSquarePlatform {
                     args.push("--videoUrl".to_string());
                     args.push(v.trim().to_string());
                 }
-            }
-            if let Some(ref img) = image_path {
-                args.push("--image".to_string());
-                args.push(img.clone());
             }
             run_square_script(app, "post-text.mjs", &args)?
         };
@@ -148,6 +164,7 @@ fn square_dir(app: &AppHandle) -> Result<PathBuf, String> {
     for dir in candidates {
         if dir.join("scripts").join("save-key.mjs").exists()
             && dir.join("scripts").join("post-text.mjs").exists()
+            && dir.join("scripts").join("post-image.mjs").exists()
             && dir.join("scripts").join("post-video.mjs").exists()
         {
             return Ok(dir);

@@ -398,3 +398,15 @@ export function setPlatformEnabled(
 ): Promise<string> {
   return invoke<string>("set_platform_enabled", { platform, enabled });
 }
+
+// ── Image Picker ──
+
+export interface PickedImage {
+  base64: string;
+  mime: string;
+  name: string;
+}
+
+export function pickImageFile(): Promise<PickedImage | null> {
+  return invoke<PickedImage | null>("pick_image_file");
+}
