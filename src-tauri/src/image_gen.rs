@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::error::Error as _;
 use tauri::AppHandle;
 
 use crate::http::build_http_client_with_timeout;
@@ -219,12 +220,21 @@ pub async fn generate_image_cf(
             } else if e.is_connect() {
                 msg.push_str("无法连接到 Cloudflare Workers AI 服务，请检查：");
                 msg.push_str("\n  1. API 端点 URL 是否正确");
-                msg.push_str("\n  2. 网络 / 代理是否可达");
+                msg.push_str("\n  2. 网络 / 代理是否可达（当前依赖系统代理设置）");
                 msg.push_str(&format!("\n  目标: {}", endpoint));
             } else {
                 msg.push_str("Cloudflare 图片生成请求发送失败。");
             }
+            // Walk the error source chain for deeper diagnostics
             msg.push_str(&format!("\n原始错误: {}", e));
+            let mut src: Option<&(dyn std::error::Error + 'static)> = e.source();
+            let mut depth = 0;
+            while let Some(cause) = src {
+                depth += 1;
+                msg.push_str(&format!("\n  原因 {}: {}", depth, cause));
+                if depth >= 5 { break; }
+                src = cause.source();
+            }
             msg
         })?;
 
