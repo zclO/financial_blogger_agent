@@ -24,6 +24,12 @@ export function useNews(
   const onNewTopicsRef = useRef(onNewTopics);
   onNewTopicsRef.current = onNewTopics;
 
+  // Ref indicating a manual fetch is in progress; shared with auto-publish tick to avoid concurrency
+  const manualFetchLockRef = useRef(false);
+
+  // Skip the first effect run (initial mount) since we load from store manually
+  const skipInitialSaveRef = useRef(true);
+
   // ── Load persisted sources on mount ──
   useEffect(() => {
     (async () => {
@@ -42,48 +48,37 @@ export function useNews(
     })();
   }, []);
 
-  // ── Persist helper ──
-  const persistSources = useCallback((sources: NewsSource[]) => {
-    setNewsSources(sources);
-    saveNewsSourceStore({ sources }).catch(() => {});
-  }, []);
+  // ── Persist sources whenever they change ──
+  useEffect(() => {
+    if (skipInitialSaveRef.current) {
+      skipInitialSaveRef.current = false;
+      return;
+    }
+    saveNewsSourceStore({ sources: newsSources }).catch(() => {});
+  }, [newsSources]);
 
   // ── CRUD ──
 
   const addSource = useCallback((source: NewsSource) => {
-    setNewsSources((prev) => {
-      const next = [...prev, source];
-      saveNewsSourceStore({ sources: next }).catch(() => {});
-      return next;
-    });
+    setNewsSources((prev) => [...prev, source]);
   }, []);
 
   const updateSource = useCallback((id: string, patch: Partial<NewsSource>) => {
-    setNewsSources((prev) => {
-      const next = prev.map((s) => (s.id === id ? { ...s, ...patch } : s));
-      saveNewsSourceStore({ sources: next }).catch(() => {});
-      return next;
-    });
+    setNewsSources((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
   }, []);
 
   const removeSource = useCallback((id: string) => {
-    setNewsSources((prev) => {
-      const next = prev.filter((s) => s.id !== id);
-      saveNewsSourceStore({ sources: next }).catch(() => {});
-      return next;
-    });
+    setNewsSources((prev) => prev.filter((s) => s.id !== id));
   }, []);
 
-  const resetSources = useCallback(() => {
-    (async () => {
-      try {
-        const defaults = await getDefaultNewsSources();
-        persistSources(defaults);
-      } catch {
-        persistSources(DEFAULT_NEWS_SOURCES);
-      }
-    })();
-  }, [persistSources]);
+  const resetSources = useCallback(async () => {
+    try {
+      const defaults = await getDefaultNewsSources();
+      setNewsSources(defaults);
+    } catch {
+      setNewsSources(DEFAULT_NEWS_SOURCES);
+    }
+  }, []);
 
   // ── Article import ──
 
@@ -122,6 +117,8 @@ export function useNews(
   // ── Fetch ──
 
   const fetchAllNews = async () => {
+    if (manualFetchLockRef.current) return;
+    manualFetchLockRef.current = true;
     setNewsFetching(true);
     setNotice("");
     try {
@@ -138,11 +135,14 @@ export function useNews(
       const msg = error instanceof Error ? error.message : String(error);
       setNotice(`新闻抓取失败：${msg}`);
     } finally {
+      manualFetchLockRef.current = false;
       setNewsFetching(false);
     }
   };
 
   const fetchSingleSource = async (source: NewsSource) => {
+    if (manualFetchLockRef.current) return;
+    manualFetchLockRef.current = true;
     setNewsFetching(true);
     try {
       const results = await fetchNews([source]);
@@ -161,6 +161,7 @@ export function useNews(
       const msg = error instanceof Error ? error.message : String(error);
       setNotice(`${source.name} 抓取失败：${msg}`);
     } finally {
+      manualFetchLockRef.current = false;
       setNewsFetching(false);
     }
   };
@@ -175,5 +176,6 @@ export function useNews(
     updateSource,
     removeSource,
     resetSources,
+    manualFetchLockRef,
   };
 }

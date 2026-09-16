@@ -6,22 +6,36 @@ use crate::publisher::PublishResult;
 
 // ── Types ──
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueEntry {
+    #[serde(default)]
     pub id: String,
+    #[serde(default)]
     pub title: String,
+    #[serde(default)]
     pub body: String,
+    #[serde(default)]
     pub final_body: String,
+    #[serde(default)]
     pub publish_type: String,
+    #[serde(default)]
     pub video_source_type: String,
+    #[serde(default)]
     pub video_url: String,
+    #[serde(default)]
     pub video_file_path: String,
+    #[serde(default)]
     pub symbols: Vec<String>,
+    #[serde(default)]
     pub source_name: String,
+    #[serde(default)]
     pub status: String,
+    #[serde(default)]
     pub created_at: String,
+    #[serde(default)]
     pub sent_at: Option<String>,
+    #[serde(default)]
     pub logs: Vec<String>,
     #[serde(default)]
     pub target_platforms: Vec<String>,
@@ -38,6 +52,7 @@ pub struct QueueEntry {
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishQueueStore {
+    #[serde(default)]
     pub entries: Vec<QueueEntry>,
 }
 
@@ -57,7 +72,14 @@ pub fn load_publish_queue(app: AppHandle) -> Result<PublishQueueStore, String> {
     if !p.exists() {
         return Ok(PublishQueueStore::default());
     }
-    serde_json::from_slice(&fs::read(p).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+    let data = fs::read(&p).map_err(|e| e.to_string())?;
+    match serde_json::from_slice::<PublishQueueStore>(&data) {
+        Ok(store) => Ok(store),
+        Err(e) => {
+            eprintln!("[publish_queue] Failed to parse {}, resetting to defaults: {}", p.display(), e);
+            Ok(PublishQueueStore::default())
+        }
+    }
 }
 
 #[tauri::command]

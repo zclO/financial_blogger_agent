@@ -54,6 +54,20 @@ export function usePublishing(
   const squareConfigRef = useRef(squareConfig);
   squareConfigRef.current = squareConfig;
 
+  // Refs for debounced save — always read latest value instead of stale closure
+  const autoPublishRef = useRef(autoPublish);
+  autoPublishRef.current = autoPublish;
+  const queueLogsRef = useRef(queueLogs);
+  queueLogsRef.current = queueLogs;
+  const publishStateRef = useRef(publishState);
+  publishStateRef.current = publishState;
+  const publishOutputRef = useRef(publishOutput);
+  publishOutputRef.current = publishOutput;
+  const scheduleAtInputRef = useRef(scheduleAtInput);
+  scheduleAtInputRef.current = scheduleAtInput;
+  const allowScheduledPublishRef = useRef(allowScheduledPublish);
+  allowScheduledPublishRef.current = allowScheduledPublish;
+
   // ── Load from persistence on mount ──
   useEffect(() => {
     Promise.all([loadDraftStore(), loadPublishQueue()])
@@ -101,6 +115,8 @@ export function usePublishing(
   }, [setDraft]);
 
   // ── Debounced save when state changes ──
+  // Uses refs to always read the LATEST values, preventing a stale closure
+  // from overwriting a correct immediate save (race condition).
   useEffect(() => {
     if (!loaded) return;
     const timer = setTimeout(() => {
@@ -120,24 +136,65 @@ export function usePublishing(
             imageMime: draftRef.current.imageMime,
             imageName: draftRef.current.imageName,
           },
-          queueLogs,
-          publishState,
-          publishOutput,
-          scheduleAtInput,
-          allowScheduledPublish,
-          autoPublishEnabled: autoPublish.enabled,
-          autoPublishIntervalMinutes: autoPublish.intervalMinutes,
-          autoPublishLastSourceName: autoPublish.lastSourceName,
-          autoPublishLastTime: autoPublish.lastTime,
-          autoPublishSourcePriority: autoPublish.sourcePriority,
-          autoPublishPipelineId: autoPublish.pipelineId,
-          autoPublishTargetPlatforms: autoPublish.targetPlatforms,
+          queueLogs: queueLogsRef.current,
+          publishState: publishStateRef.current,
+          publishOutput: publishOutputRef.current,
+          scheduleAtInput: scheduleAtInputRef.current,
+          allowScheduledPublish: allowScheduledPublishRef.current,
+          autoPublishEnabled: autoPublishRef.current.enabled,
+          autoPublishIntervalMinutes: autoPublishRef.current.intervalMinutes,
+          autoPublishLastSourceName: autoPublishRef.current.lastSourceName,
+          autoPublishLastTime: autoPublishRef.current.lastTime,
+          autoPublishSourcePriority: autoPublishRef.current.sourcePriority,
+          autoPublishPipelineId: autoPublishRef.current.pipelineId,
+          autoPublishTargetPlatforms: autoPublishRef.current.targetPlatforms,
         }),
-        savePublishQueue({ entries: queueEntries }),
+        savePublishQueue({ entries: queueEntriesRef.current }),
       ]).catch((err) => console.error("Failed to save:", err));
     }, 800);
     return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queueEntries, queueLogs, publishState, publishOutput, scheduleAtInput, allowScheduledPublish, autoPublish, loaded]);
+
+  // ── Immediate save for auto-publish config changes (no debounce) ──
+  const autoPublishInitializedRef = useRef(false);
+  useEffect(() => {
+    if (!loaded) return;
+    // Skip the initial render before autoPublish is populated from store
+    if (!autoPublishInitializedRef.current) {
+      autoPublishInitializedRef.current = true;
+      return;
+    }
+    saveDraftStore({
+      draft: {
+        title: draftRef.current.title,
+        body: draftRef.current.body,
+        reviewed: draftRef.current.reviewed,
+        queued: draftRef.current.queued,
+        publishType: draftRef.current.publishType,
+        videoSourceType: draftRef.current.videoSourceType,
+        videoUrl: draftRef.current.videoUrl,
+        videoFilePath: draftRef.current.videoFilePath,
+        targetPlatforms: draftRef.current.targetPlatforms,
+        imageBase64: draftRef.current.imageBase64,
+        imageMime: draftRef.current.imageMime,
+        imageName: draftRef.current.imageName,
+      },
+      queueLogs,
+      publishState,
+      publishOutput,
+      scheduleAtInput,
+      allowScheduledPublish,
+      autoPublishEnabled: autoPublish.enabled,
+      autoPublishIntervalMinutes: autoPublish.intervalMinutes,
+      autoPublishLastSourceName: autoPublish.lastSourceName,
+      autoPublishLastTime: autoPublish.lastTime,
+      autoPublishSourcePriority: autoPublish.sourcePriority,
+      autoPublishPipelineId: autoPublish.pipelineId,
+      autoPublishTargetPlatforms: autoPublish.targetPlatforms,
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPublish.enabled, autoPublish.intervalMinutes, autoPublish.sourcePriority, autoPublish.pipelineId, autoPublish.targetPlatforms]);
 
   const appendQueueLog = useCallback((content: string) => {
     setQueueLogs((prev) => [`[${nowText()}] ${content}`, ...prev].slice(0, 50));

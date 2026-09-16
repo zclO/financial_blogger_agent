@@ -129,12 +129,20 @@ export function App() {
   const updateAutoPublishLastRef = useRef(publishing.updateAutoPublishLast);
   updateAutoPublishLastRef.current = publishing.updateAutoPublishLast;
 
+  // Lock to prevent concurrent auto-publish tick and manual fetch
+  const autoFetchInProgressRef = useRef(false);
+
   useEffect(() => {
     const ap = autoPublishRef.current;
     if (!ap.enabled || !ap.intervalMinutes || ap.intervalMinutes < 1) return;
     const intervalMs = ap.intervalMinutes * 60 * 1000;
 
     const tick = async () => {
+      // Guard: bail out immediately if auto-publish was disabled while awaiting
+      if (!autoPublishRef.current.enabled) return;
+      // Prevent concurrent fetches (auto tick overlapping with manual fetch or another tick)
+      if (autoFetchInProgressRef.current || news.manualFetchLockRef.current) return;
+      autoFetchInProgressRef.current = true;
       try {
       const currentAP = autoPublishRef.current;
 
@@ -325,6 +333,8 @@ export function App() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         appendQueueLogRef.current(`自动发布执行异常：${msg}`);
+      } finally {
+        autoFetchInProgressRef.current = false;
       }
     };
 

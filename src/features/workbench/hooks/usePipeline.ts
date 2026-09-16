@@ -82,6 +82,7 @@ function toStored(p: SavedPipeline): StoredPipeline {
       sourceConfig: n.sourceConfig,
       llmConfig: n.llmConfig,
       imageConfig: n.imageConfig,
+      imageCfConfig: n.imageCfConfig,
     })),
     edges: p.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
   };
@@ -100,6 +101,7 @@ function fromStored(s: StoredPipeline): SavedPipeline {
       sourceConfig: n.sourceConfig,
       llmConfig: n.llmConfig,
       imageConfig: n.imageConfig,
+      imageCfConfig: n.imageCfConfig,
     })),
     edges: s.edges.map((e) => ({
       id: e.id,

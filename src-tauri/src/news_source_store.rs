@@ -10,6 +10,7 @@ use crate::news::NewsSourceDto;
 #[serde(rename_all = "camelCase")]
 pub struct NewsSourceStore {
     /// User-customised news sources (replaces defaults when non-empty).
+    #[serde(default)]
     pub sources: Vec<NewsSourceDto>,
 }
 
@@ -29,8 +30,14 @@ pub fn load_news_source_store(app: AppHandle) -> Result<NewsSourceStore, String>
     if !p.exists() {
         return Ok(NewsSourceStore::default());
     }
-    serde_json::from_slice(&fs::read(p).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())
+    let data = fs::read(&p).map_err(|e| e.to_string())?;
+    match serde_json::from_slice::<NewsSourceStore>(&data) {
+        Ok(store) => Ok(store),
+        Err(e) => {
+            eprintln!("[news_source] Failed to parse {}, resetting to defaults: {}", p.display(), e);
+            Ok(NewsSourceStore::default())
+        }
+    }
 }
 
 #[tauri::command]
