@@ -42,6 +42,7 @@ pub fn run() {
             // image generation
             image_gen::generate_image,
             image_gen::generate_image_cf,
+            image_gen::generate_image_tx,
             // pipeline store
             pipeline_store::load_pipelines,
             pipeline_store::save_pipelines,

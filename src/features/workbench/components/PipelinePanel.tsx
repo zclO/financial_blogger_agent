@@ -13,10 +13,11 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { callLlm, generateImage, generateImageCf } from "../../../lib/tauri";
+import { callLlm, generateImage, generateImageCf, generateImageTx } from "../../../lib/tauri";
 import type {
   ImageCfNodeConfig,
   ImageNodeConfig,
+  ImageTxNodeConfig,
   LlmNodeConfig,
   PipelineNode,
   PipelineNodeKind,
@@ -53,6 +54,7 @@ export function PipelinePanel({
   onUpdateLlmConfig,
   onUpdateImageConfig,
   onUpdateImageCfConfig,
+  onUpdateImageTxConfig,
   onAddEdge,
   onRemoveEdge,
   onCreatePipeline,
@@ -85,6 +87,7 @@ export function PipelinePanel({
   onUpdateLlmConfig: (nodeId: string, config: Partial<LlmNodeConfig>) => void;
   onUpdateImageConfig: (nodeId: string, config: Partial<ImageNodeConfig>) => void;
   onUpdateImageCfConfig: (nodeId: string, config: Partial<ImageCfNodeConfig>) => void;
+  onUpdateImageTxConfig: (nodeId: string, config: Partial<ImageTxNodeConfig>) => void;
   onAddEdge: (source: string, target: string) => void;
   onRemoveEdge: (edgeId: string) => void;
   onCreatePipeline: (name: string) => string;
@@ -119,6 +122,7 @@ export function PipelinePanel({
         onUpdateLlmConfig={onUpdateLlmConfig}
         onUpdateImageConfig={onUpdateImageConfig}
         onUpdateImageCfConfig={onUpdateImageCfConfig}
+        onUpdateImageTxConfig={onUpdateImageTxConfig}
         onAddEdge={onAddEdge}
         onRemoveEdge={onRemoveEdge}
         onSavePipeline={onSavePipeline}
@@ -379,6 +383,7 @@ function PipelineEditor({
   onUpdateLlmConfig,
   onUpdateImageConfig,
   onUpdateImageCfConfig,
+  onUpdateImageTxConfig,
   onAddEdge,
   onRemoveEdge,
   onSavePipeline,
@@ -401,6 +406,7 @@ function PipelineEditor({
   onUpdateLlmConfig: (nodeId: string, config: Partial<LlmNodeConfig>) => void;
   onUpdateImageConfig: (nodeId: string, config: Partial<ImageNodeConfig>) => void;
   onUpdateImageCfConfig: (nodeId: string, config: Partial<ImageCfNodeConfig>) => void;
+  onUpdateImageTxConfig: (nodeId: string, config: Partial<ImageTxNodeConfig>) => void;
   onAddEdge: (source: string, target: string) => void;
   onRemoveEdge: (edgeId: string) => void;
   onSavePipeline: () => void;
@@ -590,6 +596,10 @@ function PipelineEditor({
             icon="⚡" label="CF 配图" desc="Cloudflare FLUX"
             color="#f97316" onClick={() => handleAddNode("image_cf")}
           />
+          <PaletteButton
+            icon="🎨" label="腾讯云配图" desc="混元文生图"
+            color="#0ea5e9" onClick={() => handleAddNode("image_tx")}
+          />
           <div style={{ marginTop: "1rem", fontSize: 11, color: "#aaa", lineHeight: 1.5 }}>
             点击添加节点到画布。拖动端口创建连线。右键可快速添加。
           </div>
@@ -645,6 +655,8 @@ function PipelineEditor({
                     onClick={() => handleAddNodeAt("image")} />
                   <CtxItem icon="⚡" label="添加 CF 配图"
                     onClick={() => handleAddNodeAt("image_cf")} />
+                  <CtxItem icon="🎨" label="添加腾讯云配图"
+                    onClick={() => handleAddNodeAt("image_tx")} />
                 </>
               )}
             </ContextMenu>
@@ -663,7 +675,7 @@ function PipelineEditor({
                 marginBottom: "0.75rem",
               }}>
                 <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
-                  {selectedNode.kind === "source" ? "📰" : selectedNode.kind === "llm" ? "🤖" : selectedNode.kind === "image_cf" ? "⚡" : "🖼️"} {selectedNode.name}
+                  {selectedNode.kind === "source" ? "📰" : selectedNode.kind === "llm" ? "🤖" : selectedNode.kind === "image_cf" ? "⚡" : selectedNode.kind === "image_tx" ? "🎨" : "🖼️"} {selectedNode.name}
                 </h3>
                 <button
                   onClick={() => onRemoveNode(selectedNode.id)}
@@ -767,6 +779,21 @@ function PipelineEditor({
                     height: 1024,
                   }}
                   onUpdate={onUpdateImageCfConfig}
+                />
+              )}
+
+              {selectedNode.kind === "image_tx" && (
+                <ImageTxConfigEditor
+                  nodeId={selectedNode.id}
+                  config={selectedNode.imageTxConfig ?? {
+                    secretId: "",
+                    secretKey: "",
+                    promptTemplate: "",
+                    negativePrompt: "",
+                    style: "",
+                    resolution: "768:768",
+                  }}
+                  onUpdate={onUpdateImageTxConfig}
                 />
               )}
             </div>
@@ -1187,6 +1214,143 @@ function ImageConfigEditor({
           <input style={inputStyle} type="number" min={512} max={1536} step={64}
             value={config.height}
             onChange={(e) => onUpdate(nodeId, { height: parseInt(e.target.value) || 1024 })} />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function ImageTxConfigEditor({
+  nodeId, config, onUpdate,
+}: {
+  nodeId: string;
+  config: ImageTxNodeConfig;
+  onUpdate: (nodeId: string, config: Partial<ImageTxNodeConfig>) => void;
+}) {
+  const [testState, setTestState] = useState<"idle" | "testing" | "success" | "error">("idle");
+  const [testMsg, setTestMsg] = useState("");
+
+  const handleTest = async () => {
+    if (!config.secretId || !config.secretKey) {
+      setTestState("error");
+      setTestMsg("请先填写 SecretId 和 SecretKey。");
+      return;
+    }
+    if (!config.promptTemplate.trim()) {
+      setTestState("error");
+      setTestMsg("请先填写提示词模板。");
+      return;
+    }
+    setTestState("testing");
+    setTestMsg("");
+    try {
+      const resp = await generateImageTx({
+        secretId: config.secretId,
+        secretKey: config.secretKey,
+        prompt: "一只可爱的橘色猫咪坐在窗台上，温暖的阳光",
+        negativePrompt: config.negativePrompt || undefined,
+        style: config.style || undefined,
+        resolution: config.resolution || "768:768",
+        logoAdd: 0,
+      });
+      setTestState("success");
+      setTestMsg(`连通成功 · ${resp.fileName} · ${(resp.imageBase64.length * 0.75 / 1024).toFixed(0)} KB`);
+    } catch (err) {
+      setTestState("error");
+      setTestMsg(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const labelStyle = { display: "block", fontSize: 12, fontWeight: 500, color: "#555", marginBottom: 2 };
+  const inputStyle = {
+    width: "100%", padding: "6px 8px", border: "1px solid #ddd", borderRadius: 6,
+    fontSize: 13, outline: "none", boxSizing: "border-box" as const,
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+      <div style={{ padding: "0.5rem 0.6rem", background: "#f0f9ff", borderRadius: 6, border: "1px solid #bae6fd", fontSize: 11, color: "#0369a1", lineHeight: 1.5 }}>
+        使用腾讯云混元大模型文生图轻量版接口。需要腾讯云 API 密钥（SecretId + SecretKey）。
+      </div>
+      <label>
+        <span style={labelStyle}>SecretId</span>
+        <input style={inputStyle} value={config.secretId}
+          onChange={(e) => onUpdate(nodeId, { secretId: e.target.value })}
+          placeholder="腾讯云 API SecretId" />
+      </label>
+      <label>
+        <span style={labelStyle}>SecretKey</span>
+        <input style={inputStyle} type="password" value={config.secretKey}
+          onChange={(e) => onUpdate(nodeId, { secretKey: e.target.value })}
+          placeholder="腾讯云 API SecretKey" />
+      </label>
+
+      {/* ── Test connection ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <button
+          onClick={handleTest}
+          disabled={testState === "testing"}
+          style={{
+            padding: "6px 14px", borderRadius: 6, border: "1px solid",
+            borderColor: testState === "success" ? "#86efac" : testState === "error" ? "#fca5a5" : "#ddd",
+            background: testState === "success" ? "#f0fdf4" : testState === "error" ? "#fef2f2" : "#fff",
+            color: testState === "testing" ? "#aaa" : "#333",
+            fontSize: 12, fontWeight: 500, cursor: testState === "testing" ? "wait" : "pointer",
+            transition: "all 0.15s", whiteSpace: "nowrap",
+          }}
+        >
+          {testState === "testing" ? "⏳ 生成中…" : testState === "success" ? "✅ 已连通" : testState === "error" ? "❌ 失败" : "🔌 测试连通"}
+        </button>
+        {testMsg && (
+          <span style={{
+            fontSize: 11, lineHeight: 1.4, flex: 1,
+            color: testState === "success" ? "#16a34a" : testState === "error" ? "#dc2626" : "#888",
+          }}>
+            {testMsg}
+          </span>
+        )}
+      </div>
+
+      <label>
+        <span style={labelStyle}>提示词模板</span>
+        <textarea style={{ ...inputStyle, minHeight: 100, resize: "vertical", fontFamily: "inherit" }}
+          value={config.promptTemplate}
+          onChange={(e) => onUpdate(nodeId, { promptTemplate: e.target.value })}
+          placeholder="描述要生成的图片内容…" />
+        <span style={{ fontSize: 11, color: "#aaa", marginTop: 2, display: "block" }}>
+          变量：{`{{title}}`} {`{{summary}}`} {`{{source}}`} {`{{link}}`}
+        </span>
+      </label>
+      <label>
+        <span style={labelStyle}>反向提示词（可选）</span>
+        <textarea style={{ ...inputStyle, minHeight: 50, resize: "vertical", fontFamily: "inherit" }}
+          value={config.negativePrompt}
+          onChange={(e) => onUpdate(nodeId, { negativePrompt: e.target.value })}
+          placeholder="不希望出现的内容…" />
+      </label>
+      <div style={{ display: "flex", gap: "0.5rem" }}>
+        <label style={{ flex: 1 }}>
+          <span style={labelStyle}>分辨率</span>
+          <select style={{ ...inputStyle, cursor: "pointer" }}
+            value={config.resolution}
+            onChange={(e) => onUpdate(nodeId, { resolution: e.target.value })}>
+            <option value="768:768">768×768 (1:1)</option>
+            <option value="768:1024">768×1024 (3:4)</option>
+            <option value="1024:768">1024×768 (4:3)</option>
+            <option value="1024:1024">1024×1024 (1:1)</option>
+            <option value="720:1280">720×1280 (9:16)</option>
+            <option value="1280:720">1280×720 (16:9)</option>
+            <option value="768:1280">768×1280 (3:5)</option>
+            <option value="1280:768">1280×768 (5:3)</option>
+            <option value="1080:1920">1080×1920 (9:16)</option>
+            <option value="1920:1080">1920×1080 (16:9)</option>
+          </select>
+        </label>
+        <label style={{ flex: 1 }}>
+          <span style={labelStyle}>风格（可选）</span>
+          <input style={inputStyle} value={config.style}
+            onChange={(e) => onUpdate(nodeId, { style: e.target.value })}
+            placeholder="例如: 201 (日系动漫)" />
         </label>
       </div>
     </div>

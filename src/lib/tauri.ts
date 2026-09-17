@@ -179,6 +179,22 @@ export function generateImageCf(request: ImageGenCfRequest): Promise<ImageGenRes
   return invoke<ImageGenResponse>("generate_image_cf", { request });
 }
 
+// ── Tencent Cloud Hunyuan Text-to-Image (Lite) ──
+
+export interface ImageGenTxRequest {
+  secretId: string;
+  secretKey: string;
+  prompt: string;
+  negativePrompt?: string;
+  style?: string;
+  resolution?: string;
+  logoAdd?: number;
+}
+
+export function generateImageTx(request: ImageGenTxRequest): Promise<ImageGenResponse> {
+  return invoke<ImageGenResponse>("generate_image_tx", { request });
+}
+
 // ── Pipeline Store ──
 
 export interface StoredPipelineNode {
@@ -213,7 +229,15 @@ export interface StoredPipelineNode {
     width: number;
     height: number;
   };
-}
+  imageTxConfig?: {
+    secretId: string;
+    secretKey: string;
+    promptTemplate: string;
+    negativePrompt: string;
+    style: string;
+    resolution: string;
+  };
+};
 
 export interface StoredFlowEdge {
   id: string;

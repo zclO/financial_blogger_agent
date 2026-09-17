@@ -4,6 +4,7 @@ import {
   callLlm,
   generateImage,
   generateImageCf,
+  generateImageTx,
   loadArticleLogStore,
   loadPipelines,
   saveArticleLogStore,
@@ -22,6 +23,7 @@ import type {
   FlowEdge,
   ImageCfNodeConfig,
   ImageNodeConfig,
+  ImageTxNodeConfig,
   LlmNodeConfig,
   PipelineNode,
   PipelineNodeKind,
@@ -69,6 +71,17 @@ function defaultImageCfConfig(): ImageCfNodeConfig {
   };
 }
 
+function defaultImageTxConfig(): ImageTxNodeConfig {
+  return {
+    secretId: "",
+    secretKey: "",
+    promptTemplate: DEFAULT_IMAGE_PROMPT,
+    negativePrompt: "",
+    style: "",
+    resolution: "768:768",
+  };
+}
+
 function toStored(p: SavedPipeline): StoredPipeline {
   return {
     id: p.id,
@@ -83,6 +96,7 @@ function toStored(p: SavedPipeline): StoredPipeline {
       llmConfig: n.llmConfig,
       imageConfig: n.imageConfig,
       imageCfConfig: n.imageCfConfig,
+      imageTxConfig: n.imageTxConfig,
     })),
     edges: p.edges.map((e) => ({ id: e.id, source: e.source, target: e.target })),
   };
@@ -102,6 +116,7 @@ function fromStored(s: StoredPipeline): SavedPipeline {
       llmConfig: n.llmConfig,
       imageConfig: n.imageConfig,
       imageCfConfig: n.imageCfConfig,
+      imageTxConfig: n.imageTxConfig,
     })),
     edges: s.edges.map((e) => ({
       id: e.id,
@@ -312,6 +327,47 @@ async function executePipeline(
         const msg = err instanceof Error ? err.message : String(err);
         appendLog(`  \u2192 \u5931\u8D25: ${msg}`);
         appendLog(`\u274C \u300C${node.name}\u300DCloudflare \u914D\u56FE\u5931\u8D25\uFF0C\u6CBF\u7528\u539F\u59CB\u6570\u636E\u3002`);
+        nodeOutputs.set(nodeId, input);
+        anyNodeFailed = true;
+      }
+    } else if (node.kind === "image_tx") {
+      const config = node.imageTxConfig;
+      if (!config || !config.secretId || !config.secretKey) {
+        appendLog(`\u26A0\uFE0F \u300C${node.name}\u300D\u672A\u914D\u7F6E\u817E\u8BAF\u4E91\u51ED\u8BC1\uFF0C\u8DF3\u8FC7\u3002`);
+        nodeOutputs.set(nodeId, input);
+        continue;
+      }
+      appendLog(`\u{1F3A8} \u300C${node.name}\u300D\u6B63\u5728\u901A\u8FC7\u817E\u8BAF\u4E91\u6DF7\u5143\u751F\u6210\u914D\u56FE\u2026`);
+
+      const prompt = config.promptTemplate
+        .replace(/\{\{title\}\}/g, input.originalTitle)
+        .replace(/\{\{summary\}\}/g, input.processedContent)
+        .replace(/\{\{source\}\}/g, input.sourceName)
+        .replace(/\{\{link\}\}/g, input.link);
+
+      try {
+        const resp = await generateImageTx({
+          secretId: config.secretId,
+          secretKey: config.secretKey,
+          prompt,
+          negativePrompt: config.negativePrompt || undefined,
+          style: config.style || undefined,
+          resolution: config.resolution || "768:768",
+          logoAdd: 0,
+        });
+        const sizeKB = (resp.imageBase64.length * 0.75 / 1024).toFixed(0);
+        appendLog(`  \u2192 \u751F\u6210\u56FE\u7247 ${resp.fileName} \u00B7 ${sizeKB} KB`);
+        nodeOutputs.set(nodeId, {
+          ...input,
+          generatedImage: resp.imageBase64,
+          generatedImageName: resp.fileName,
+          generatedImageMime: resp.mimeType,
+        });
+        appendLog(`\u2705 \u300C${node.name}\u300D\u817E\u8BAF\u4E91\u914D\u56FE\u751F\u6210\u5B8C\u6210\u3002`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appendLog(`  \u2192 \u5931\u8D25: ${msg}`);
+        appendLog(`\u274C \u300C${node.name}\u300D\u817E\u8BAF\u4E91\u914D\u56FE\u5931\u8D25\uFF0C\u6CBF\u7528\u539F\u59CB\u6570\u636E\u3002`);
         nodeOutputs.set(nodeId, input);
         anyNodeFailed = true;
       }
@@ -591,7 +647,7 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
   const addNode = useCallback(
     (kind: PipelineNodeKind, position: { x: number; y: number }) => {
       const id = `node-${++nextId}`;
-      const name = kind === "source" ? "\u4FE1\u606F\u6E90" : kind === "llm" ? "\u5927\u6A21\u578B" : kind === "image" ? "\u914D\u56FE\u751F\u6210" : "CF \u914D\u56FE";
+      const name = kind === "source" ? "\u4FE1\u606F\u6E90" : kind === "llm" ? "\u5927\u6A21\u578B" : kind === "image" ? "\u914D\u56FE\u751F\u6210" : kind === "image_cf" ? "CF \u914D\u56FE" : "\u817E\u8BAF\u4E91\u914D\u56FE";
       const node: PipelineNode = {
         id,
         kind,
@@ -600,6 +656,7 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
         ...(kind === "llm" ? { llmConfig: defaultLlmConfig() } : {}),
         ...(kind === "image" ? { imageConfig: defaultImageConfig() } : {}),
         ...(kind === "image_cf" ? { imageCfConfig: defaultImageCfConfig() } : {}),
+        ...(kind === "image_tx" ? { imageTxConfig: defaultImageTxConfig() } : {}),
       };
       setNodes((prev) => [...prev, node]);
       setSelectedNodeId(id);
@@ -693,6 +750,32 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
                   width: 1024,
                   height: 1024,
                   ...n.imageCfConfig,
+                  ...config,
+                },
+              }
+            : n,
+        ),
+      );
+      setDirty(true);
+    },
+    [],
+  );
+
+  const updateImageTxConfig = useCallback(
+    (nodeId: string, config: Partial<ImageTxNodeConfig>) => {
+      setNodes((prev) =>
+        prev.map((n) =>
+          n.id === nodeId
+            ? {
+                ...n,
+                imageTxConfig: {
+                  secretId: "",
+                  secretKey: "",
+                  promptTemplate: "",
+                  negativePrompt: "",
+                  style: "",
+                  resolution: "768:768",
+                  ...n.imageTxConfig,
                   ...config,
                 },
               }
@@ -895,6 +978,7 @@ export function usePipeline(onProcessComplete?: (topicId: number, content: strin
     updateLlmConfig,
     updateImageConfig,
     updateImageCfConfig,
+    updateImageTxConfig,
     addEdge,
     removeEdge,
     // Execution

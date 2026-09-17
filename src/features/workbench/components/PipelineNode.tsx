@@ -9,6 +9,7 @@ const NODE_COLORS: Record<string, string> = {
   llm: "#7c3aed",
   image: "#f59e0b",
   image_cf: "#f97316",
+  image_tx: "#0ea5e9",
 };
 
 const NODE_ICONS: Record<string, string> = {
@@ -16,6 +17,7 @@ const NODE_ICONS: Record<string, string> = {
   llm: "🤖",
   image: "🖼️",
   image_cf: "⚡",
+  image_tx: "🎨",
 };
 
 export function PipelineNodeComponent({ id, data, selected }: NodeProps<AppNode>) {
@@ -31,7 +33,9 @@ export function PipelineNodeComponent({ id, data, selected }: NodeProps<AppNode>
           ? `${data.imageConfig?.width ?? 1024}×${data.imageConfig?.height ?? 1024}`
           : data.kind === "image_cf"
             ? `CF ${data.imageCfConfig?.width ?? 1024}×${data.imageCfConfig?.height ?? 1024}`
-            : "未配置";
+            : data.kind === "image_tx"
+              ? `混元 ${data.imageTxConfig?.resolution ?? "768:768"}`
+              : "未配置";
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
