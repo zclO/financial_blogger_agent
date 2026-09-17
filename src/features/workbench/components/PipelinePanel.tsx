@@ -1,6 +1,7 @@
 import {
   Background,
   Controls,
+  MiniMap,
   type Connection,
   type Node,
   type NodeMouseHandler,
@@ -9,6 +10,8 @@ import {
   useNodesState,
   useEdgesState,
   type Edge,
+  type EdgeProps,
+  getBezierPath,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -26,13 +29,52 @@ import type {
   SavedPipeline,
   Topic,
 } from "../types";
-import { PipelineNodeComponent } from "./PipelineNode";
+import { PipelineNodeComponent, NODE_COLORS, getNodeIcon } from "./PipelineNode";
 
 const nodeTypes = { pipelineNode: PipelineNodeComponent };
 
+// ── Custom gradient edge ──
+
+function PipelineEdge({
+  id, sourceX, sourceY, targetX, targetY,
+  sourcePosition, targetPosition,
+  style = {}, markerEnd, source, target,
+}: EdgeProps) {
+  const [edgePath] = getBezierPath({
+    sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
+  });
+
+  // Get colors from node data if available
+  const sourceColor = "#b1b1b1";
+  const targetColor = "#b1b1b1";
+  const gradientId = `gradient-${id}`;
+
+  return (
+    <>
+      <defs>
+        <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor={sourceColor} />
+          <stop offset="100%" stopColor={targetColor} />
+        </linearGradient>
+      </defs>
+      <path
+        id={id}
+        className="pipeline-edge-path"
+        style={style}
+        d={edgePath}
+        stroke={`url(#${gradientId})`}
+        markerEnd={markerEnd}
+      />
+    </>
+  );
+}
+
+const edgeTypes = { pipelineEdge: PipelineEdge };
+
 const defaultEdgeOptions = {
-  type: "smoothstep" as const,
-  style: { stroke: "#b1b1b1", strokeWidth: 1.5 },
+  type: "pipelineEdge" as const,
+  style: { strokeWidth: 2 },
+  animated: false,
 };
 
 // ── Props ──
@@ -423,8 +465,33 @@ function PipelineEditor({
   const [ctxMenu, setCtxMenu] = useState<{
     x: number; y: number; nodeId: string | null;
   } | null>(null);
+  const [paletteCollapsed, setPaletteCollapsed] = useState(true);
+  const [configOpen, setConfigOpen] = useState(false);
   const rfInstance = useRef<ReactFlowInstance<AppNode, Edge> | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // ── Drag from palette ──
+  const handleDragStart = (e: React.DragEvent, kind: PipelineNodeKind) => {
+    e.dataTransfer.setData("application/pipeline-node-kind", kind);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const kind = e.dataTransfer.getData("application/pipeline-node-kind") as PipelineNodeKind;
+    if (!kind || !rfInstance.current || !canvasRef.current) return;
+    const bounds = canvasRef.current.getBoundingClientRect();
+    const pos = rfInstance.current.screenToFlowPosition({
+      x: e.clientX - bounds.left,
+      y: e.clientY - bounds.top,
+    });
+    onAddNode(kind, { x: pos.x, y: pos.y });
+  };
 
   const flowNodes: AppNode[] = useMemo(
     () =>
@@ -465,11 +532,11 @@ function PipelineEditor({
   );
 
   const handleNodeClick: NodeMouseHandler = useCallback(
-    (_event, node) => { onSelectNode(node.id); },
+    (_event, node) => { onSelectNode(node.id); setConfigOpen(true); },
     [onSelectNode],
   );
 
-  const handlePaneClick = useCallback(() => { onSelectNode(null); }, [onSelectNode]);
+  const handlePaneClick = useCallback(() => { onSelectNode(null); setConfigOpen(false); }, [onSelectNode]);
 
   const handleNodeDragStop = useCallback(
     (_event: MouseEvent | TouchEvent, node: Node) => {
@@ -531,31 +598,29 @@ function PipelineEditor({
 
   return (
     <section style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 120px)" }}>
-      {/* ── Header ── */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: "0.75rem",
-        padding: "0.5rem 0", borderBottom: "1px solid #e5e7eb", marginBottom: "0.5rem",
-      }}>
-        <button
-          onClick={onCloseEditor}
-          style={{
-            background: "none", border: "1px solid #ddd", borderRadius: 6,
-            padding: "4px 10px", cursor: "pointer", fontSize: 13, color: "#555",
-          }}
-          title="返回流水线列表"
-        >
-          ← 列表
-        </button>
-        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
-          {editingPipeline.name}
-        </h2>
-        {dirty && (
-          <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 500 }}>● 未保存</span>
-        )}
+      {/* ── Header / Toolbar ── */}
+      <div className="pipeline-toolbar">
+        {/* Left: Breadcrumb */}
+        <div className="pipeline-breadcrumb">
+          <a onClick={onCloseEditor}>流水线管理</a>
+          <span>/</span>
+          <span style={{ color: "#333", fontWeight: 500 }}>{editingPipeline.name}</span>
+          {dirty && <span className="pipeline-unsaved-dot" title="有未保存的修改" />}
+        </div>
+      
         <span style={{ flex: 1 }} />
-        {running && (
-          <span style={{ fontSize: 12, color: "#7c3aed", fontWeight: 500 }}>⏳ 执行中…</span>
-        )}
+      
+        {/* Center: Status indicator */}
+        <div className="pipeline-status-indicator">
+          <span className={`pipeline-status-dot ${running ? "running" : "idle"}`} />
+          <span style={{ color: running ? "#7c3aed" : "#888" }}>
+            {running ? "执行中…" : "空闲"}
+          </span>
+        </div>
+      
+        <span style={{ flex: 1 }} />
+      
+        {/* Right: Actions */}
         <button
           onClick={onSavePipeline}
           disabled={!dirty}
@@ -565,48 +630,92 @@ function PipelineEditor({
             color: dirty ? "#fff" : "#aaa",
             fontSize: 13, fontWeight: 500,
             cursor: dirty ? "pointer" : "default",
+            transition: "all 0.15s",
           }}
         >
-          💾 保存
+          保存
         </button>
       </div>
 
       <div style={{ display: "flex", gap: 0, flex: 1, minHeight: 0 }}>
         {/* ── Left: Node palette ── */}
         <div style={{
-          width: 180, flexShrink: 0, padding: "0.75rem",
-          borderRight: "1px solid #e5e7eb", background: "#fafbfc",
+          width: paletteCollapsed ? 48 : 200, flexShrink: 0, padding: paletteCollapsed ? "0.75rem 0.25rem" : "0.75rem",
+          borderRight: "1px solid var(--panel-border)", background: "var(--panel-bg)",
+          transition: "width 0.2s ease", overflow: "hidden",
         }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: "#888", textTransform: "uppercase", marginBottom: "0.5rem", letterSpacing: 0.5 }}>
-            节点列表
+          <div style={{ display: "flex", alignItems: "center", justifyContent: paletteCollapsed ? "center" : "space-between", marginBottom: "0.5rem" }}>
+            {!paletteCollapsed && (
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#888", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                节点库
+              </div>
+            )}
+            <button
+              onClick={() => setPaletteCollapsed(!paletteCollapsed)}
+              style={{
+                width: 24, height: 24, borderRadius: 4, border: "1px solid #e5e7eb",
+                background: "#fff", cursor: "pointer", display: "flex",
+                alignItems: "center", justifyContent: "center", fontSize: 10, color: "#888",
+                padding: 0,
+              }}
+              title={paletteCollapsed ? "展开节点库" : "折叠节点库"}
+            >
+              {paletteCollapsed ? "▶" : "◀"}
+            </button>
           </div>
-          <PaletteButton
-            icon="📰" label="信息源" desc="文章输入"
-            color="#52c41a" onClick={() => handleAddNode("source")}
-          />
-          <PaletteButton
-            icon="🤖" label="大模型" desc="LLM 加工"
-            color="#7c3aed" onClick={() => handleAddNode("llm")}
-          />
-          <PaletteButton
-            icon="🖼️" label="配图生成" desc="AI 配图"
-            color="#f59e0b" onClick={() => handleAddNode("image")}
-          />
-          <PaletteButton
-            icon="⚡" label="CF 配图" desc="Cloudflare FLUX"
-            color="#f97316" onClick={() => handleAddNode("image_cf")}
-          />
-          <PaletteButton
-            icon="🎨" label="腾讯云配图" desc="混元文生图"
-            color="#0ea5e9" onClick={() => handleAddNode("image_tx")}
-          />
-          <div style={{ marginTop: "1rem", fontSize: 11, color: "#aaa", lineHeight: 1.5 }}>
-            点击添加节点到画布。拖动端口创建连线。右键可快速添加。
-          </div>
+
+          {!paletteCollapsed && (
+            <>
+              {/* ── Data Source ── */}
+              <div className="palette-section">
+                <div className="palette-section-title">数据源</div>
+                <PaletteItem
+                  kind="source" icon={<SourceIconSmall color="#52c41a" />} label="信息源" desc="文章输入"
+                  color="#52c41a" onClick={() => handleAddNode("source")}
+                  onDragStart={(e) => handleDragStart(e, "source")}
+                />
+              </div>
+
+              {/* ── AI Processing ── */}
+              <div className="palette-section">
+                <div className="palette-section-title">AI 处理</div>
+                <PaletteItem
+                  kind="llm" icon={<LlmIconSmall color="#7c3aed" />} label="大模型" desc="LLM 加工"
+                  color="#7c3aed" onClick={() => handleAddNode("llm")}
+                  onDragStart={(e) => handleDragStart(e, "llm")}
+                />
+              </div>
+
+              {/* ── Image Generation ── */}
+              <div className="palette-section">
+                <div className="palette-section-title">配图生成</div>
+                <PaletteItem
+                  kind="image" icon={<ImageIconSmall color="#f59e0b" />} label="配图生成" desc="Stability AI"
+                  color="#f59e0b" onClick={() => handleAddNode("image")}
+                  onDragStart={(e) => handleDragStart(e, "image")}
+                />
+                <PaletteItem
+                  kind="image_cf" icon={<ImageCfIconSmall color="#f97316" />} label="CF 配图" desc="Cloudflare FLUX"
+                  color="#f97316" onClick={() => handleAddNode("image_cf")}
+                  onDragStart={(e) => handleDragStart(e, "image_cf")}
+                />
+                <PaletteItem
+                  kind="image_tx" icon={<ImageTxIconSmall color="#0ea5e9" />} label="腾讯云配图" desc="混元文生图"
+                  color="#0ea5e9" onClick={() => handleAddNode("image_tx")}
+                  onDragStart={(e) => handleDragStart(e, "image_tx")}
+                />
+              </div>
+
+              <div style={{ marginTop: "1rem", fontSize: 11, color: "#aaa", lineHeight: 1.5 }}>
+                拖拽节点到画布创建，或点击添加。右键画布可快速添加。
+              </div>
+            </>
+          )}
         </div>
 
         {/* ── Center: Canvas ── */}
-        <div ref={canvasRef} style={{ flex: 1, minWidth: 0, background: "#f8f9fb", position: "relative" }}>
+        <div ref={canvasRef} style={{ flex: 1, minWidth: 0, background: "var(--pipeline-bg)", position: "relative" }}
+          onDragOver={handleDragOver} onDrop={handleDrop}>
           <ReactFlow
             nodes={rfNodes}
             edges={rfEdges}
@@ -621,15 +730,38 @@ function PipelineEditor({
             onNodeContextMenu={handleNodeContextMenu}
             onPaneContextMenu={handlePaneContextMenu}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             defaultEdgeOptions={defaultEdgeOptions}
             fitView
             proOptions={{ hideAttribution: true }}
           >
-            <Background color="#e0e0e0" gap={20} size={1} />
+            <Background color="#f0f0f0" gap={24} lineWidth={1} />
             <Controls
               showInteractive={false}
-              style={{ borderRadius: 8, border: "1px solid #e5e7eb" }}
+              className="pipeline-controls"
             />
+            <MiniMap
+              className="pipeline-minimap"
+              nodeColor={(n) => {
+                const kind = (n.data as PipelineNode)?.kind;
+                return NODE_COLORS[kind] ?? "#888";
+              }}
+              nodeStrokeWidth={3}
+              zoomable
+              pannable
+              style={{ width: 140, height: 90 }}
+            />
+            {nodes.length === 0 && (
+              <div className="pipeline-canvas-empty">
+                <div className="pipeline-canvas-empty-icon">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.5">
+                    <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                  </svg>
+                </div>
+                <div className="pipeline-canvas-empty-text">从左侧拖入节点开始编排</div>
+                <div className="pipeline-canvas-empty-hint">或右键画布快速添加节点</div>
+              </div>
+            )}
           </ReactFlow>
 
           {/* ── Context menu ── */}
@@ -661,28 +793,58 @@ function PipelineEditor({
               )}
             </ContextMenu>
           )}
-        </div>
 
-        {/* ── Right: Config panel ── */}
-        <div style={{
-          width: 340, flexShrink: 0, borderLeft: "1px solid #e5e7eb",
-          background: "#fff", overflowY: "auto",
-        }}>
-          {selectedNode ? (
+          {/* ── Right: Config panel (overlay) ── */}
+          {configOpen && selectedNode && (
+            <div style={{
+              position: "absolute", right: 0, top: 0, bottom: 0,
+              width: 340, zIndex: 10,
+              borderLeft: "1px solid var(--panel-border)",
+              background: "var(--config-bg)", overflowY: "auto",
+              boxShadow: "-4px 0 16px rgba(0,0,0,0.06)",
+            }}>
             <div style={{ padding: "0.75rem" }}>
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                marginBottom: "0.75rem",
-              }}>
-                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
-                  {selectedNode.kind === "source" ? "📰" : selectedNode.kind === "llm" ? "🤖" : selectedNode.kind === "image_cf" ? "⚡" : selectedNode.kind === "image_tx" ? "🎨" : "🖼️"} {selectedNode.name}
-                </h3>
+              {/* Close button */}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.5rem" }}>
+                <button
+                  onClick={() => { setConfigOpen(false); onSelectNode(null); }}
+                  style={{
+                    width: 28, height: 28, borderRadius: 6,
+                    border: "1px solid #e5e7eb", background: "#fff",
+                    cursor: "pointer", display: "flex",
+                    alignItems: "center", justifyContent: "center",
+                    fontSize: 12, color: "#888", padding: 0,
+                  }}
+                  title="关闭配置面板"
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M2 2l8 8M10 2l-8 8" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Node summary card */}
+              <div className="config-node-summary">
+                <div className="config-node-summary-icon" style={{ background: `${NODE_COLORS[selectedNode.kind] ?? "#888"}15` }}>
+                  {getNodeIcon(selectedNode.kind, NODE_COLORS[selectedNode.kind] ?? "#888")}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: "#111" }}>{selectedNode.name}</div>
+                  <span className="config-node-summary-type" style={{
+                    background: `${NODE_COLORS[selectedNode.kind] ?? "#888"}15`,
+                    color: NODE_COLORS[selectedNode.kind] ?? "#888",
+                  }}>
+                    {selectedNode.kind === "source" ? "数据源" : selectedNode.kind === "llm" ? "AI 处理" : "配图生成"}
+                  </span>
+                </div>
                 <button
                   onClick={() => onRemoveNode(selectedNode.id)}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#999", fontSize: 16 }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#999", fontSize: 16, padding: 4 }}
                   title="删除节点"
                 >
-                  ×
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M3 3l8 8M11 3l-8 8" />
+                  </svg>
                 </button>
               </div>
 
@@ -797,14 +959,8 @@ function PipelineEditor({
                 />
               )}
             </div>
-          ) : (
-            <div style={{ padding: "1.5rem 1rem", color: "#888", textAlign: "center" }}>
-              <div style={{ fontSize: 32, marginBottom: "0.5rem" }}>👈</div>
-              <p style={{ fontSize: 13 }}>点击画布中的节点查看配置</p>
-            </div>
-          )}
 
-          {/* ── Execution results ── */}
+            {/* ── Execution results ── */}
           {results.length > 0 && (
             <div style={{ padding: "0.75rem", borderTop: "1px solid #e5e7eb" }}>
               <h4 style={{ margin: "0 0 0.5rem", fontSize: 13, fontWeight: 600 }}>加工结果</h4>
@@ -855,6 +1011,8 @@ function PipelineEditor({
                   {runLog.join("\n")}
                 </pre>
               </details>
+            </div>
+          )}
             </div>
           )}
         </div>
@@ -946,29 +1104,88 @@ function CtxItem({
   );
 }
 
-function PaletteButton({
-  icon, label, desc, color, onClick,
+// ── Small palette icons ──
+
+function SourceIconSmall({ color }: { color: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2" />
+      <path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6Z" />
+    </svg>
+  );
+}
+
+function LlmIconSmall({ color }: { color: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 8V4H8" />
+      <rect width="16" height="12" x="4" y="8" rx="2" />
+      <path d="M2 14h2M20 14h2M15 13v2M9 13v2" />
+    </svg>
+  );
+}
+
+function ImageIconSmall({ color }: { color: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+    </svg>
+  );
+}
+
+function ImageCfIconSmall({ color }: { color: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <path d="M13 2v7h7" />
+      <path d="M9 15l2 2 4-4" />
+    </svg>
+  );
+}
+
+function ImageTxIconSmall({ color }: { color: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3a9 9 0 0 1 9 9 9 9 0 0 1-9 9 9 9 0 0 1-9-9 9 9 0 0 1 9-9z" />
+      <path d="M9.5 9h5M9.5 12h5M9.5 15h3" />
+    </svg>
+  );
+}
+
+function PaletteItem({
+  icon, label, desc, color, onClick, onDragStart,
 }: {
-  icon: string; label: string; desc: string; color: string; onClick: () => void;
+  kind: string;
+  icon: React.ReactNode; label: string; desc: string; color: string;
+  onClick: () => void;
+  onDragStart: (e: React.DragEvent) => void;
 }) {
   return (
-    <button
+    <div
+      className="palette-item"
+      draggable
+      onDragStart={onDragStart}
       onClick={onClick}
-      style={{
-        display: "flex", alignItems: "center", gap: "0.5rem",
-        width: "100%", padding: "0.5rem 0.6rem", marginBottom: "0.35rem",
-        border: "1px solid #e5e7eb", borderRadius: 8, background: "#fff",
-        cursor: "pointer", textAlign: "left", transition: "border-color 0.15s",
+      style={{}}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = color;
+        e.currentTarget.style.boxShadow = `0 1px 4px ${color}22`;
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = color)}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#e5e7eb")}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = "var(--panel-border)";
+        e.currentTarget.style.boxShadow = "none";
+      }}
     >
-      <span style={{ fontSize: 20 }}>{icon}</span>
+      <div className="palette-item-icon" style={{ background: `${color}15` }}>
+        {icon}
+      </div>
       <div>
         <div style={{ fontSize: 13, fontWeight: 500, color: "#333" }}>{label}</div>
         <div style={{ fontSize: 11, color: "#999" }}>{desc}</div>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -1016,34 +1233,40 @@ function LlmConfigEditor({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-      <label>
-        <span style={labelStyle}>API 端点</span>
-        <input style={inputStyle} value={config.apiEndpoint}
-          onChange={(e) => onUpdate(nodeId, { apiEndpoint: e.target.value })}
-          placeholder="https://api.openai.com/v1/chat/completions" />
-      </label>
-      <label>
-        <span style={labelStyle}>API Key</span>
-        <input style={inputStyle} type="password" value={config.apiKey}
-          onChange={(e) => onUpdate(nodeId, { apiKey: e.target.value })}
-          placeholder="sk-..." />
-      </label>
-      <div style={{ display: "flex", gap: "0.5rem" }}>
-        <label style={{ flex: 1 }}>
-          <span style={labelStyle}>模型</span>
-          <input style={inputStyle} value={config.model}
-            onChange={(e) => onUpdate(nodeId, { model: e.target.value })}
-            placeholder="gpt-4o-mini" />
-        </label>
-        <label style={{ width: 80 }}>
-          <span style={labelStyle}>温度</span>
-          <input style={inputStyle} type="number" min={0} max={2} step={0.1}
-            value={config.temperature}
-            onChange={(e) => onUpdate(nodeId, { temperature: parseFloat(e.target.value) || 0.7 })} />
-        </label>
+      {/* API Configuration */}
+      <div className="config-section">
+        <div className="config-section-title">API 配置</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <label>
+            <span style={labelStyle}>API 端点</span>
+            <input style={inputStyle} value={config.apiEndpoint}
+              onChange={(e) => onUpdate(nodeId, { apiEndpoint: e.target.value })}
+              placeholder="https://api.openai.com/v1/chat/completions" />
+          </label>
+          <label>
+            <span style={labelStyle}>API Key</span>
+            <input style={inputStyle} type="password" value={config.apiKey}
+              onChange={(e) => onUpdate(nodeId, { apiKey: e.target.value })}
+              placeholder="sk-..." />
+          </label>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <label style={{ flex: 1 }}>
+              <span style={labelStyle}>模型</span>
+              <input style={inputStyle} value={config.model}
+                onChange={(e) => onUpdate(nodeId, { model: e.target.value })}
+                placeholder="gpt-4o-mini" />
+            </label>
+            <label style={{ width: 80 }}>
+              <span style={labelStyle}>温度</span>
+              <input style={inputStyle} type="number" min={0} max={2} step={0.1}
+                value={config.temperature}
+                onChange={(e) => onUpdate(nodeId, { temperature: parseFloat(e.target.value) || 0.7 })} />
+            </label>
+          </div>
+        </div>
       </div>
 
-      {/* ── Test connection ── */}
+      {/* Test connection */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <button
           onClick={handleTest}
@@ -1057,7 +1280,7 @@ function LlmConfigEditor({
             transition: "all 0.15s", whiteSpace: "nowrap",
           }}
         >
-          {testState === "testing" ? "⏳ 测试中…" : testState === "success" ? "✅ 已连通" : testState === "error" ? "❌ 失败" : "🔌 测试连通"}
+          {testState === "testing" ? <><span className="test-btn-spinner" />测试中…</> : testState === "success" ? "✅ 已连通" : testState === "error" ? "❌ 失败" : "🔌 测试连通"}
         </button>
         {testMsg && (
           <span style={{
@@ -1069,21 +1292,27 @@ function LlmConfigEditor({
         )}
       </div>
 
-      <label>
-        <span style={labelStyle}>系统提示词</span>
-        <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical", fontFamily: "inherit" }}
-          value={config.systemPrompt}
-          onChange={(e) => onUpdate(nodeId, { systemPrompt: e.target.value })} />
-      </label>
-      <label>
-        <span style={labelStyle}>用户提示词模板</span>
-        <textarea style={{ ...inputStyle, minHeight: 100, resize: "vertical", fontFamily: "inherit" }}
-          value={config.userPromptTemplate}
-          onChange={(e) => onUpdate(nodeId, { userPromptTemplate: e.target.value })} />
-        <span style={{ fontSize: 11, color: "#aaa", marginTop: 2, display: "block" }}>
-          变量：{`{{title}}`} {`{{summary}}`} {`{{source}}`} {`{{link}}`}
-        </span>
-      </label>
+      {/* Prompts */}
+      <div className="config-section">
+        <div className="config-section-title">提示词</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <label>
+            <span style={labelStyle}>系统提示词</span>
+            <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical", fontFamily: "inherit" }}
+              value={config.systemPrompt}
+              onChange={(e) => onUpdate(nodeId, { systemPrompt: e.target.value })} />
+          </label>
+          <label>
+            <span style={labelStyle}>用户提示词模板</span>
+            <textarea style={{ ...inputStyle, minHeight: 100, resize: "vertical", fontFamily: "inherit" }}
+              value={config.userPromptTemplate}
+              onChange={(e) => onUpdate(nodeId, { userPromptTemplate: e.target.value })} />
+            <span style={{ fontSize: 11, color: "#aaa", marginTop: 2, display: "block" }}>
+              变量：{`{{title}}`} {`{{summary}}`} {`{{source}}`} {`{{link}}`}
+            </span>
+          </label>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1136,20 +1365,26 @@ function ImageConfigEditor({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-      <label>
-        <span style={labelStyle}>API 端点（可选）</span>
-        <input style={inputStyle} value={config.apiEndpoint}
-          onChange={(e) => onUpdate(nodeId, { apiEndpoint: e.target.value })}
-          placeholder="默认: https://api.stability.ai/v2beta/stable-image/generate/core" />
-      </label>
-      <label>
-        <span style={labelStyle}>API Key</span>
-        <input style={inputStyle} type="password" value={config.apiKey}
-          onChange={(e) => onUpdate(nodeId, { apiKey: e.target.value })}
-          placeholder="Stability AI API Key" />
-      </label>
+      {/* API Configuration */}
+      <div className="config-section">
+        <div className="config-section-title">API 配置</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <label>
+            <span style={labelStyle}>API 端点（可选）</span>
+            <input style={inputStyle} value={config.apiEndpoint}
+              onChange={(e) => onUpdate(nodeId, { apiEndpoint: e.target.value })}
+              placeholder="默认: https://api.stability.ai/v2beta/stable-image/generate/core" />
+          </label>
+          <label>
+            <span style={labelStyle}>API Key</span>
+            <input style={inputStyle} type="password" value={config.apiKey}
+              onChange={(e) => onUpdate(nodeId, { apiKey: e.target.value })}
+              placeholder="Stability AI API Key" />
+          </label>
+        </div>
+      </div>
 
-      {/* ── Test connection ── */}
+      {/* Test connection */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <button
           onClick={handleTest}
@@ -1163,7 +1398,7 @@ function ImageConfigEditor({
             transition: "all 0.15s", whiteSpace: "nowrap",
           }}
         >
-          {testState === "testing" ? "⏳ 生成中…" : testState === "success" ? "✅ 已连通" : testState === "error" ? "❌ 失败" : "🔌 测试连通"}
+          {testState === "testing" ? <><span className="test-btn-spinner" />生成中…</> : testState === "success" ? "✅ 已连通" : testState === "error" ? "❌ 失败" : "🔌 测试连通"}
         </button>
         {testMsg && (
           <span style={{
@@ -1175,46 +1410,57 @@ function ImageConfigEditor({
         )}
       </div>
 
-      <label>
-        <span style={labelStyle}>提示词模板</span>
-        <textarea style={{ ...inputStyle, minHeight: 100, resize: "vertical", fontFamily: "inherit" }}
-          value={config.promptTemplate}
-          onChange={(e) => onUpdate(nodeId, { promptTemplate: e.target.value })}
-          placeholder="描述要生成的图片内容…" />
-        <span style={{ fontSize: 11, color: "#aaa", marginTop: 2, display: "block" }}>
-          变量：{`{{title}}`} {`{{summary}}`} {`{{source}}`} {`{{link}}`}
-        </span>
-      </label>
-      <label>
-        <span style={labelStyle}>反向提示词（可选）</span>
-        <textarea style={{ ...inputStyle, minHeight: 50, resize: "vertical", fontFamily: "inherit" }}
-          value={config.negativePrompt}
-          onChange={(e) => onUpdate(nodeId, { negativePrompt: e.target.value })}
-          placeholder="不希望出现的内容…" />
-      </label>
-      <div style={{ display: "flex", gap: "0.5rem" }}>
-        <label style={{ flex: 1 }}>
-          <span style={labelStyle}>输出格式</span>
-          <select style={{ ...inputStyle, cursor: "pointer" }}
-            value={config.outputFormat}
-            onChange={(e) => onUpdate(nodeId, { outputFormat: e.target.value })}>
-            <option value="png">PNG</option>
-            <option value="jpeg">JPEG</option>
-            <option value="webp">WebP</option>
-          </select>
-        </label>
-        <label style={{ width: 90 }}>
-          <span style={labelStyle}>宽度</span>
-          <input style={inputStyle} type="number" min={512} max={1536} step={64}
-            value={config.width}
-            onChange={(e) => onUpdate(nodeId, { width: parseInt(e.target.value) || 1024 })} />
-        </label>
-        <label style={{ width: 90 }}>
-          <span style={labelStyle}>高度</span>
-          <input style={inputStyle} type="number" min={512} max={1536} step={64}
-            value={config.height}
-            onChange={(e) => onUpdate(nodeId, { height: parseInt(e.target.value) || 1024 })} />
-        </label>
+      {/* Generation Parameters */}
+      <div className="config-section">
+        <div className="config-section-title">生成参数</div>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <label style={{ flex: 1 }}>
+            <span style={labelStyle}>输出格式</span>
+            <select style={{ ...inputStyle, cursor: "pointer" }}
+              value={config.outputFormat}
+              onChange={(e) => onUpdate(nodeId, { outputFormat: e.target.value })}>
+              <option value="png">PNG</option>
+              <option value="jpeg">JPEG</option>
+              <option value="webp">WebP</option>
+            </select>
+          </label>
+          <label style={{ width: 90 }}>
+            <span style={labelStyle}>宽度</span>
+            <input style={inputStyle} type="number" min={512} max={1536} step={64}
+              value={config.width}
+              onChange={(e) => onUpdate(nodeId, { width: parseInt(e.target.value) || 1024 })} />
+          </label>
+          <label style={{ width: 90 }}>
+            <span style={labelStyle}>高度</span>
+            <input style={inputStyle} type="number" min={512} max={1536} step={64}
+              value={config.height}
+              onChange={(e) => onUpdate(nodeId, { height: parseInt(e.target.value) || 1024 })} />
+          </label>
+        </div>
+      </div>
+
+      {/* Prompts */}
+      <div className="config-section">
+        <div className="config-section-title">提示词</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <label>
+            <span style={labelStyle}>提示词模板</span>
+            <textarea style={{ ...inputStyle, minHeight: 100, resize: "vertical", fontFamily: "inherit" }}
+              value={config.promptTemplate}
+              onChange={(e) => onUpdate(nodeId, { promptTemplate: e.target.value })}
+              placeholder="描述要生成的图片内容…" />
+            <span style={{ fontSize: 11, color: "#aaa", marginTop: 2, display: "block" }}>
+              变量：{`{{title}}`} {`{{summary}}`} {`{{source}}`} {`{{link}}`}
+            </span>
+          </label>
+          <label>
+            <span style={labelStyle}>反向提示词（可选）</span>
+            <textarea style={{ ...inputStyle, minHeight: 50, resize: "vertical", fontFamily: "inherit" }}
+              value={config.negativePrompt}
+              onChange={(e) => onUpdate(nodeId, { negativePrompt: e.target.value })}
+              placeholder="不希望出现的内容…" />
+          </label>
+        </div>
       </div>
     </div>
   );
@@ -1272,20 +1518,27 @@ function ImageTxConfigEditor({
       <div style={{ padding: "0.5rem 0.6rem", background: "#f0f9ff", borderRadius: 6, border: "1px solid #bae6fd", fontSize: 11, color: "#0369a1", lineHeight: 1.5 }}>
         使用腾讯云混元大模型文生图轻量版接口。需要腾讯云 API 密钥（SecretId + SecretKey）。
       </div>
-      <label>
-        <span style={labelStyle}>SecretId</span>
-        <input style={inputStyle} value={config.secretId}
-          onChange={(e) => onUpdate(nodeId, { secretId: e.target.value })}
-          placeholder="腾讯云 API SecretId" />
-      </label>
-      <label>
-        <span style={labelStyle}>SecretKey</span>
-        <input style={inputStyle} type="password" value={config.secretKey}
-          onChange={(e) => onUpdate(nodeId, { secretKey: e.target.value })}
-          placeholder="腾讯云 API SecretKey" />
-      </label>
 
-      {/* ── Test connection ── */}
+      {/* API Configuration */}
+      <div className="config-section">
+        <div className="config-section-title">API 配置</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <label>
+            <span style={labelStyle}>SecretId</span>
+            <input style={inputStyle} value={config.secretId}
+              onChange={(e) => onUpdate(nodeId, { secretId: e.target.value })}
+              placeholder="腾讯云 API SecretId" />
+          </label>
+          <label>
+            <span style={labelStyle}>SecretKey</span>
+            <input style={inputStyle} type="password" value={config.secretKey}
+              onChange={(e) => onUpdate(nodeId, { secretKey: e.target.value })}
+              placeholder="腾讯云 API SecretKey" />
+          </label>
+        </div>
+      </div>
+
+      {/* Test connection */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <button
           onClick={handleTest}
@@ -1299,7 +1552,7 @@ function ImageTxConfigEditor({
             transition: "all 0.15s", whiteSpace: "nowrap",
           }}
         >
-          {testState === "testing" ? "⏳ 生成中…" : testState === "success" ? "✅ 已连通" : testState === "error" ? "❌ 失败" : "🔌 测试连通"}
+          {testState === "testing" ? <><span className="test-btn-spinner" />生成中…</> : testState === "success" ? "✅ 已连通" : testState === "error" ? "❌ 失败" : "🔌 测试连通"}
         </button>
         {testMsg && (
           <span style={{
@@ -1311,47 +1564,58 @@ function ImageTxConfigEditor({
         )}
       </div>
 
-      <label>
-        <span style={labelStyle}>提示词模板</span>
-        <textarea style={{ ...inputStyle, minHeight: 100, resize: "vertical", fontFamily: "inherit" }}
-          value={config.promptTemplate}
-          onChange={(e) => onUpdate(nodeId, { promptTemplate: e.target.value })}
-          placeholder="描述要生成的图片内容…" />
-        <span style={{ fontSize: 11, color: "#aaa", marginTop: 2, display: "block" }}>
-          变量：{`{{title}}`} {`{{summary}}`} {`{{source}}`} {`{{link}}`}
-        </span>
-      </label>
-      <label>
-        <span style={labelStyle}>反向提示词（可选）</span>
-        <textarea style={{ ...inputStyle, minHeight: 50, resize: "vertical", fontFamily: "inherit" }}
-          value={config.negativePrompt}
-          onChange={(e) => onUpdate(nodeId, { negativePrompt: e.target.value })}
-          placeholder="不希望出现的内容…" />
-      </label>
-      <div style={{ display: "flex", gap: "0.5rem" }}>
-        <label style={{ flex: 1 }}>
-          <span style={labelStyle}>分辨率</span>
-          <select style={{ ...inputStyle, cursor: "pointer" }}
-            value={config.resolution}
-            onChange={(e) => onUpdate(nodeId, { resolution: e.target.value })}>
-            <option value="768:768">768×768 (1:1)</option>
-            <option value="768:1024">768×1024 (3:4)</option>
-            <option value="1024:768">1024×768 (4:3)</option>
-            <option value="1024:1024">1024×1024 (1:1)</option>
-            <option value="720:1280">720×1280 (9:16)</option>
-            <option value="1280:720">1280×720 (16:9)</option>
-            <option value="768:1280">768×1280 (3:5)</option>
-            <option value="1280:768">1280×768 (5:3)</option>
-            <option value="1080:1920">1080×1920 (9:16)</option>
-            <option value="1920:1080">1920×1080 (16:9)</option>
-          </select>
-        </label>
-        <label style={{ flex: 1 }}>
-          <span style={labelStyle}>风格（可选）</span>
-          <input style={inputStyle} value={config.style}
-            onChange={(e) => onUpdate(nodeId, { style: e.target.value })}
-            placeholder="例如: 201 (日系动漫)" />
-        </label>
+      {/* Generation Parameters */}
+      <div className="config-section">
+        <div className="config-section-title">生成参数</div>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <label style={{ flex: 1 }}>
+            <span style={labelStyle}>分辨率</span>
+            <select style={{ ...inputStyle, cursor: "pointer" }}
+              value={config.resolution}
+              onChange={(e) => onUpdate(nodeId, { resolution: e.target.value })}>
+              <option value="768:768">768×768 (1:1)</option>
+              <option value="768:1024">768×1024 (3:4)</option>
+              <option value="1024:768">1024×768 (4:3)</option>
+              <option value="1024:1024">1024×1024 (1:1)</option>
+              <option value="720:1280">720×1280 (9:16)</option>
+              <option value="1280:720">1280×720 (16:9)</option>
+              <option value="768:1280">768×1280 (3:5)</option>
+              <option value="1280:768">1280×768 (5:3)</option>
+              <option value="1080:1920">1080×1920 (9:16)</option>
+              <option value="1920:1080">1920×1080 (16:9)</option>
+            </select>
+          </label>
+          <label style={{ flex: 1 }}>
+            <span style={labelStyle}>风格（可选）</span>
+            <input style={inputStyle} value={config.style}
+              onChange={(e) => onUpdate(nodeId, { style: e.target.value })}
+              placeholder="例如: 201 (日系动漫)" />
+          </label>
+        </div>
+      </div>
+
+      {/* Prompts */}
+      <div className="config-section">
+        <div className="config-section-title">提示词</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <label>
+            <span style={labelStyle}>提示词模板</span>
+            <textarea style={{ ...inputStyle, minHeight: 100, resize: "vertical", fontFamily: "inherit" }}
+              value={config.promptTemplate}
+              onChange={(e) => onUpdate(nodeId, { promptTemplate: e.target.value })}
+              placeholder="描述要生成的图片内容…" />
+            <span style={{ fontSize: 11, color: "#aaa", marginTop: 2, display: "block" }}>
+              变量：{`{{title}}`} {`{{summary}}`} {`{{source}}`} {`{{link}}`}
+            </span>
+          </label>
+          <label>
+            <span style={labelStyle}>反向提示词（可选）</span>
+            <textarea style={{ ...inputStyle, minHeight: 50, resize: "vertical", fontFamily: "inherit" }}
+              value={config.negativePrompt}
+              onChange={(e) => onUpdate(nodeId, { negativePrompt: e.target.value })}
+              placeholder="不希望出现的内容…" />
+          </label>
+        </div>
       </div>
     </div>
   );
@@ -1410,20 +1674,26 @@ function ImageCfConfigEditor({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-      <label>
-        <span style={labelStyle}>API 端点</span>
-        <input style={inputStyle} value={config.apiEndpoint}
-          onChange={(e) => onUpdate(nodeId, { apiEndpoint: e.target.value })}
-          placeholder="https://api.cloudflare.com/client/v4/accounts/{id}/ai/run/@cf/black-forest-labs/flux-2-dev" />
-      </label>
-      <label>
-        <span style={labelStyle}>API Token</span>
-        <input style={inputStyle} type="password" value={config.apiToken}
-          onChange={(e) => onUpdate(nodeId, { apiToken: e.target.value })}
-          placeholder="Cloudflare API Token" />
-      </label>
+      {/* API Configuration */}
+      <div className="config-section">
+        <div className="config-section-title">API 配置</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <label>
+            <span style={labelStyle}>API 端点</span>
+            <input style={inputStyle} value={config.apiEndpoint}
+              onChange={(e) => onUpdate(nodeId, { apiEndpoint: e.target.value })}
+              placeholder="https://api.cloudflare.com/client/v4/accounts/{id}/ai/run/@cf/black-forest-labs/flux-2-dev" />
+          </label>
+          <label>
+            <span style={labelStyle}>API Token</span>
+            <input style={inputStyle} type="password" value={config.apiToken}
+              onChange={(e) => onUpdate(nodeId, { apiToken: e.target.value })}
+              placeholder="Cloudflare API Token" />
+          </label>
+        </div>
+      </div>
 
-      {/* ── Test connection ── */}
+      {/* Test connection */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <button
           onClick={handleTest}
@@ -1437,7 +1707,7 @@ function ImageCfConfigEditor({
             transition: "all 0.15s", whiteSpace: "nowrap",
           }}
         >
-          {testState === "testing" ? "⏳ 生成中…" : testState === "success" ? "✅ 已连通" : testState === "error" ? "❌ 失败" : "🔌 测试连通"}
+          {testState === "testing" ? <><span className="test-btn-spinner" />生成中…</> : testState === "success" ? "✅ 已连通" : testState === "error" ? "❌ 失败" : "🔌 测试连通"}
         </button>
         {testMsg && (
           <span style={{
@@ -1449,34 +1719,43 @@ function ImageCfConfigEditor({
         )}
       </div>
 
-      <label>
-        <span style={labelStyle}>提示词模板</span>
-        <textarea style={{ ...inputStyle, minHeight: 100, resize: "vertical", fontFamily: "inherit" }}
-          value={config.promptTemplate}
-          onChange={(e) => onUpdate(nodeId, { promptTemplate: e.target.value })}
-          placeholder="描述要生成的图片内容…" />
-        <span style={{ fontSize: 11, color: "#aaa", marginTop: 2, display: "block" }}>
-          变量：{`{{title}}`} {`{{summary}}`} {`{{source}}`} {`{{link}}`}
-        </span>
-      </label>
-      <div style={{ display: "flex", gap: "0.5rem" }}>
-        <label style={{ width: 80 }}>
-          <span style={labelStyle}>步数</span>
-          <input style={inputStyle} type="number" min={1} max={50} step={1}
-            value={config.steps}
-            onChange={(e) => onUpdate(nodeId, { steps: parseInt(e.target.value) || 25 })} />
-        </label>
-        <label style={{ width: 90 }}>
-          <span style={labelStyle}>宽度</span>
-          <input style={inputStyle} type="number" min={512} max={1536} step={64}
-            value={config.width}
-            onChange={(e) => onUpdate(nodeId, { width: parseInt(e.target.value) || 1024 })} />
-        </label>
-        <label style={{ width: 90 }}>
-          <span style={labelStyle}>高度</span>
-          <input style={inputStyle} type="number" min={512} max={1536} step={64}
-            value={config.height}
-            onChange={(e) => onUpdate(nodeId, { height: parseInt(e.target.value) || 1024 })} />
+      {/* Generation Parameters */}
+      <div className="config-section">
+        <div className="config-section-title">生成参数</div>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <label style={{ width: 80 }}>
+            <span style={labelStyle}>步数</span>
+            <input style={inputStyle} type="number" min={1} max={50} step={1}
+              value={config.steps}
+              onChange={(e) => onUpdate(nodeId, { steps: parseInt(e.target.value) || 25 })} />
+          </label>
+          <label style={{ width: 90 }}>
+            <span style={labelStyle}>宽度</span>
+            <input style={inputStyle} type="number" min={512} max={1536} step={64}
+              value={config.width}
+              onChange={(e) => onUpdate(nodeId, { width: parseInt(e.target.value) || 1024 })} />
+          </label>
+          <label style={{ width: 90 }}>
+            <span style={labelStyle}>高度</span>
+            <input style={inputStyle} type="number" min={512} max={1536} step={64}
+              value={config.height}
+              onChange={(e) => onUpdate(nodeId, { height: parseInt(e.target.value) || 1024 })} />
+          </label>
+        </div>
+      </div>
+
+      {/* Prompts */}
+      <div className="config-section">
+        <div className="config-section-title">提示词</div>
+        <label>
+          <span style={labelStyle}>提示词模板</span>
+          <textarea style={{ ...inputStyle, minHeight: 100, resize: "vertical", fontFamily: "inherit" }}
+            value={config.promptTemplate}
+            onChange={(e) => onUpdate(nodeId, { promptTemplate: e.target.value })}
+            placeholder="描述要生成的图片内容…" />
+          <span style={{ fontSize: 11, color: "#aaa", marginTop: 2, display: "block" }}>
+            变量：{`{{title}}`} {`{{summary}}`} {`{{source}}`} {`{{link}}`}
+          </span>
         </label>
       </div>
     </div>

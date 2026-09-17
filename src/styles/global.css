@@ -1984,3 +1984,400 @@ button.danger:hover:enabled {
   color: #667085;
   font-size: 12px;
 }
+
+/* ══════════════════════════════════════════════════════════
+   Pipeline Editor – Theme Variables
+   ══════════════════════════════════════════════════════════ */
+
+:root {
+  --node-source: #52c41a;
+  --node-llm: #7c3aed;
+  --node-image: #f59e0b;
+  --node-image-cf: #f97316;
+  --node-image-tx: #0ea5e9;
+  --pipeline-bg: #f8f9fb;
+  --panel-border: #e5e7eb;
+  --panel-bg: #fafbfc;
+  --config-bg: #ffffff;
+  --toolbar-height: 48px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Pipeline Editor – Node Styles
+   ══════════════════════════════════════════════════════════ */
+
+.pipeline-node {
+  min-width: 220px;
+  max-width: 280px;
+  border-radius: 12px;
+  border: 1.5px solid var(--panel-border);
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.pipeline-node:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: #d1d5db;
+}
+
+.pipeline-node.selected {
+  border-width: 2px;
+  box-shadow: 0 0 0 3px var(--node-color, #7c3aed) 22, 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.pipeline-node-bar {
+  width: 4px;
+  flex-shrink: 0;
+}
+
+.pipeline-node-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pipeline-node-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.pipeline-node-status {
+  padding: 4px 12px;
+  background: #f9fafb;
+  border-top: 1px solid #f0f0f0;
+  font-size: 11px;
+  color: #888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pipeline-node-delete {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.pipeline-node:hover .pipeline-node-delete {
+  opacity: 1;
+}
+
+.pipeline-node-delete:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* ── Pipeline Handle (connection ports) ── */
+
+.pipeline-handle {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.pipeline-handle:hover {
+  transform: scale(1.4);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Pipeline Editor – Edge Styles
+   ══════════════════════════════════════════════════════════ */
+
+.pipeline-edge-path {
+  fill: none;
+  stroke-width: 2;
+  transition: stroke-width 0.2s ease;
+}
+
+.pipeline-edge-path.animated {
+  stroke-dasharray: 6 4;
+  animation: pipeline-edge-flow 0.8s linear infinite;
+}
+
+@keyframes pipeline-edge-flow {
+  from { stroke-dashoffset: 10; }
+  to { stroke-dashoffset: 0; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   Pipeline Editor – Palette (Left Sidebar)
+   ══════════════════════════════════════════════════════════ */
+
+.palette-section {
+  margin-bottom: 12px;
+}
+
+.palette-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0 4px;
+  margin-bottom: 6px;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: #fff;
+  cursor: grab;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.palette-item:hover {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.palette-item:active {
+  cursor: grabbing;
+}
+
+.palette-item-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.palette-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Pipeline Editor – Config Panel (Right Sidebar)
+   ══════════════════════════════════════════════════════════ */
+
+.config-section {
+  margin-bottom: 16px;
+}
+
+.config-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 10px;
+}
+
+.config-node-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 10px;
+  border: 1px solid #f0f0f0;
+  margin-bottom: 16px;
+}
+
+.config-node-summary-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.config-node-summary-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.config-node-summary-type {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Pipeline Editor – Toolbar
+   ══════════════════════════════════════════════════════════ */
+
+.pipeline-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  height: var(--toolbar-height);
+  border-bottom: 1px solid var(--panel-border);
+  background: #fff;
+}
+
+.pipeline-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #888;
+}
+
+.pipeline-breadcrumb a {
+  color: #7c3aed;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.pipeline-breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.pipeline-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.pipeline-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.pipeline-status-dot.idle { background: #d1d5db; }
+.pipeline-status-dot.running { background: #7c3aed; animation: pulse-dot 1.2s ease infinite; }
+.pipeline-status-dot.success { background: #22c55e; }
+.pipeline-status-dot.error { background: #ef4444; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
+}
+
+.pipeline-unsaved-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+  animation: pulse-dot 1.5s ease infinite;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Pipeline Editor – Canvas
+   ══════════════════════════════════════════════════════════ */
+
+.pipeline-canvas-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: #aaa;
+  pointer-events: none;
+}
+
+.pipeline-canvas-empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.4;
+}
+
+.pipeline-canvas-empty-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #999;
+}
+
+.pipeline-canvas-empty-hint {
+  font-size: 12px;
+  color: #bbb;
+  margin-top: 6px;
+}
+
+.pipeline-drop-active {
+  outline: 2px dashed #7c3aed;
+  outline-offset: -4px;
+  background: rgba(124, 58, 237, 0.03);
+}
+
+/* ── MiniMap custom styling ── */
+
+.pipeline-minimap .react-flow__minimap {
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: #fff;
+}
+
+/* ── Controls custom styling ── */
+
+.pipeline-controls {
+  border-radius: 10px !important;
+  border: 1px solid var(--panel-border) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+  overflow: hidden;
+}
+
+.pipeline-controls button {
+  border: none !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+  background: transparent !important;
+  color: #555 !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+
+.pipeline-controls button:hover {
+  background: #f5f5f5 !important;
+}
+
+.pipeline-controls button:last-child {
+  border-bottom: none !important;
+}
+
+/* ── Test button spinner ── */
+
+.test-btn-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
